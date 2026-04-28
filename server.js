@@ -1,130 +1,740 @@
-const express = require('express');
-const http = require('http');
+// server.js — ProctorGuard v2 Complete Backend
+const express  = require('express');
+const http     = require('http');
 const { Server } = require('socket.io');
-const cors = require('cors');
-const path = require('path');
+const cors     = require('cors');
+const path     = require('path');
+const jwt      = require('jsonwebtoken');
+const bcrypt   = require('bcryptjs');
+const { Pool } = require('pg');
+const multer   = require('multer');
+const XLSX     = require('xlsx');
 
-const app = express();
+const app    = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
+const io     = new Server(server, { cors: { origin: '*' } });
+
+// ── DB ──────────────────────────────────────────────────────
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
+const SECRET = process.env.JWT_SECRET || 'proctorguard-secret-2024';
+const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/student', (req, res) => res.sendFile(path.join(__dirname, 'public', 'student.html')));
-app.get('/proctor', (req, res) => res.sendFile(path.join(__dirname, 'public', 'proctor.html')));
+// ── AUTH MIDDLEWARE ─────────────────────────────────────────
+function auth(roles = []) {
+  return (req, res, next) => {
+    const token = (req.headers.authorization || '').replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+    try {
+      const user = jwt.verify(token, SECRET);
+      if (roles.length && !roles.includes(user.role))
+        return res.status(403).json({ error: 'Forbidden' });
+      req.user = user;
+      next();
+    } catch {
+      res.status(401).json({ error: 'Invalid token' });
+    }
+  };
+}
 
-// In-memory store
+// ── PAGE ROUTES ─────────────────────────────────────────────
+app.get('/',          (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
+app.get('/login',     (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
+app.get('/student',   (req, res) => res.sendFile(path.join(__dirname, 'public', 'student.html')));
+app.get('/proctor',   (req, res) => res.sendFile(path.join(__dirname, 'public', 'proctor.html')));
+app.get('/faculty',   (req, res) => res.sendFile(path.join(__dirname, 'public', 'faculty.html')));
+app.get('/moderator', (req, res) => res.sendFile(path.join(__dirname, 'public', 'moderator.html')));
+app.get('/admin',     (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+
+// ══════════════════════════════════════════════════════════════
+// AUTH ROUTES
+// ══════════════════════════════════════════════════════════════
+
+// POST /api/auth/login
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM users WHERE email = $1 AND is_active = true', [email.toLowerCase()]
+    );
+    const user = rows[0];
+    if (!user) return res.status(401).json({ error: 'Invalid email or password' });
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
+
+    const token = jwt.sign(
+      { id: user.id, name: user.name, email: user.email, role: user.role },
+      SECRET, { expiresIn: '8h' }
+    );
+    res.json({
+      token,
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, must_change_password: user.must_change_password }
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/auth/change-password
+app.post('/api/auth/change-password', auth(), async (req, res) => {
+  const { current_password, new_password } = req.body;
+  if (!new_password || new_password.length < 6)
+    return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  try {
+    const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+    const user = rows[0];
+    if (current_password) {
+      const valid = await bcrypt.compare(current_password, user.password_hash);
+      if (!valid) return res.status(400).json({ error: 'Current password incorrect' });
+    }
+    const hash = await bcrypt.hash(new_password, 10);
+    await pool.query('UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2', [hash, req.user.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/auth/me
+app.get('/api/auth/me', auth(), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, name, email, role, roll_number, department, must_change_password FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════
+// ADMIN — BULK UPLOAD
+// ══════════════════════════════════════════════════════════════
+
+// POST /api/admin/bulk-upload
+app.post('/api/admin/bulk-upload', auth(['admin']), upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  try {
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const results = { students: [], faculty: [], moderators: [], proctors: [], errors: [] };
+
+    for (const sheetName of wb.SheetNames) {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+      const role = sheetName.toLowerCase().replace(/s$/, ''); // students→student etc
+
+      if (!['student','faculty','moderator','proctor'].includes(role)) continue;
+
+      for (const row of rows) {
+        const name  = String(row['name'] || row['Name'] || '').trim();
+        const email = String(row['email'] || row['Email'] || '').trim().toLowerCase();
+        const pass  = String(row['password'] || row['Password'] || 'Welcome@123').trim();
+        const roll  = String(row['roll_number'] || row['Roll Number'] || '').trim();
+        const dept  = String(row['department'] || row['Department'] || '').trim();
+        const subjectCodes = String(row['subject_codes'] || row['Subject Codes'] || '').trim();
+
+        if (!name || !email) {
+          results.errors.push(`${sheetName}: Missing name or email in row`);
+          continue;
+        }
+
+        try {
+          const hash = await bcrypt.hash(pass, 10);
+          const { rows: inserted } = await pool.query(
+            `INSERT INTO users (name, email, password_hash, role, roll_number, department)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (email) DO UPDATE SET name=$1, role=$4
+             RETURNING id, name, email, role`,
+            [name, email, hash, role === 'student' ? 'student' : role === 'faculty' ? 'faculty' : role === 'moderator' ? 'moderator' : 'proctor', roll || null, dept || null]
+          );
+          const userId = inserted[0].id;
+
+          // Link subjects if provided
+          if (subjectCodes && (role === 'student' || role === 'faculty')) {
+            const codes = subjectCodes.split(',').map(s => s.trim()).filter(Boolean);
+            for (const code of codes) {
+              const { rows: subj } = await pool.query('SELECT id FROM subjects WHERE code = $1', [code]);
+              if (subj[0]) {
+                const table = role === 'student' ? 'student_subjects' : 'faculty_subjects';
+                const col   = role === 'student' ? 'student_id' : 'faculty_id';
+                await pool.query(
+                  `INSERT INTO ${table} (${col}, subject_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+                  [userId, subj[0].id]
+                );
+              }
+            }
+          }
+          results[sheetName.toLowerCase()].push(inserted[0]);
+        } catch (err) {
+          results.errors.push(`${sheetName} — ${email}: ${err.message}`);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      summary: {
+        students:   results.students.length,
+        faculty:    results.faculty.length,
+        moderators: results.moderators.length,
+        proctors:   results.proctors.length,
+        errors:     results.errors.length
+      },
+      errors: results.errors
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── USERS (admin) ───────────────────────────────────────────
+app.get('/api/users', auth(['admin']), async (req, res) => {
+  const { role } = req.query;
+  try {
+    let q = 'SELECT id, name, email, role, roll_number, department, is_active, created_at FROM users';
+    const params = [];
+    if (role) { q += ' WHERE role = $1'; params.push(role); }
+    q += ' ORDER BY name';
+    const { rows } = await pool.query(q, params);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/users', auth(['admin']), async (req, res) => {
+  const { name, email, password, role, roll_number, department } = req.body;
+  if (!name || !email || !role) return res.status(400).json({ error: 'name, email, role required' });
+  try {
+    const hash = await bcrypt.hash(password || 'Welcome@123', 10);
+    const { rows } = await pool.query(
+      'INSERT INTO users (name, email, password_hash, role, roll_number, department) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, name, email, role',
+      [name, email.toLowerCase(), hash, role, roll_number || null, department || null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'Email already exists' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/users/:id', auth(['admin']), async (req, res) => {
+  const { name, email, role, is_active, department, roll_number } = req.body;
+  try {
+    const { rows } = await pool.query(
+      'UPDATE users SET name=COALESCE($1,name), email=COALESCE($2,email), role=COALESCE($3,role), is_active=COALESCE($4,is_active), department=COALESCE($5,department), roll_number=COALESCE($6,roll_number) WHERE id=$7 RETURNING id,name,email,role,is_active',
+      [name, email, role, is_active, department, roll_number, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── SUBJECTS ────────────────────────────────────────────────
+app.get('/api/subjects', auth(), async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM subjects ORDER BY code');
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/subjects', auth(['admin']), async (req, res) => {
+  const { code, name, department } = req.body;
+  if (!code || !name) return res.status(400).json({ error: 'code and name required' });
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO subjects (code, name, department) VALUES ($1,$2,$3) ON CONFLICT (code) DO UPDATE SET name=$2 RETURNING *',
+      [code.toUpperCase(), name, department || null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════
+// QUESTION PAPERS (Faculty)
+// ══════════════════════════════════════════════════════════════
+
+// GET /api/papers — faculty sees their own, moderator sees submitted
+app.get('/api/papers', auth(['faculty','moderator','admin']), async (req, res) => {
+  try {
+    let q, params = [];
+    if (req.user.role === 'faculty') {
+      q = `SELECT qp.*, s.name as subject_name, s.code as subject_code
+           FROM question_papers qp JOIN subjects s ON s.id = qp.subject_id
+           WHERE qp.faculty_id = $1 ORDER BY qp.created_at DESC`;
+      params = [req.user.id];
+    } else if (req.user.role === 'moderator') {
+      q = `SELECT qp.*, s.name as subject_name, s.code as subject_code,
+           u.name as faculty_name
+           FROM question_papers qp JOIN subjects s ON s.id = qp.subject_id
+           JOIN users u ON u.id = qp.faculty_id
+           WHERE qp.status IN ('submitted','under_review') ORDER BY qp.submitted_at`;
+      params = [];
+    } else {
+      q = `SELECT qp.*, s.name as subject_name, s.code as subject_code,
+           u.name as faculty_name
+           FROM question_papers qp JOIN subjects s ON s.id = qp.subject_id
+           JOIN users u ON u.id = qp.faculty_id ORDER BY qp.created_at DESC`;
+    }
+    const { rows } = await pool.query(q, params);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/papers
+app.post('/api/papers', auth(['faculty']), async (req, res) => {
+  const { subject_id, title, total_marks, duration_mins, instructions } = req.body;
+  if (!subject_id || !title) return res.status(400).json({ error: 'subject_id and title required' });
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO question_papers (subject_id, faculty_id, title, total_marks, duration_mins, instructions) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [subject_id, req.user.id, title, total_marks || 100, duration_mins || 90, instructions || null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/papers/:id — with questions
+app.get('/api/papers/:id', auth(), async (req, res) => {
+  try {
+    const { rows: papers } = await pool.query(
+      `SELECT qp.*, s.name as subject_name, s.code as subject_code,
+       u.name as faculty_name
+       FROM question_papers qp
+       JOIN subjects s ON s.id = qp.subject_id
+       JOIN users u ON u.id = qp.faculty_id
+       WHERE qp.id = $1`, [req.params.id]
+    );
+    if (!papers[0]) return res.status(404).json({ error: 'Paper not found' });
+    const { rows: questions } = await pool.query(
+      'SELECT * FROM questions WHERE paper_id = $1 ORDER BY order_index', [req.params.id]
+    );
+    res.json({ ...papers[0], questions });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /api/papers/:id/submit — faculty submits for moderation
+app.patch('/api/papers/:id/submit', auth(['faculty']), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE question_papers SET status='submitted', submitted_at=NOW()
+       WHERE id=$1 AND faculty_id=$2 RETURNING *`,
+      [req.params.id, req.user.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Paper not found' });
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /api/papers/:id/moderate — moderator approves/rejects
+app.patch('/api/papers/:id/moderate', auth(['moderator']), async (req, res) => {
+  const { action, note } = req.body; // action: 'approve' | 'reject'
+  if (!['approve','reject'].includes(action))
+    return res.status(400).json({ error: 'action must be approve or reject' });
+  try {
+    const status = action === 'approve' ? 'approved' : 'rejected';
+    const { rows } = await pool.query(
+      `UPDATE question_papers
+       SET status=$1, moderator_id=$2, rejection_note=$3,
+       approved_at = CASE WHEN $1='approved' THEN NOW() ELSE NULL END
+       WHERE id=$4 RETURNING *`,
+      [status, req.user.id, note || null, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════
+// QUESTIONS (Faculty + Moderator)
+// ══════════════════════════════════════════════════════════════
+
+// POST /api/questions
+app.post('/api/questions', auth(['faculty']), async (req, res) => {
+  const { paper_id, type, question_text, marks, option_a, option_b, option_c, option_d, correct_option, explanation } = req.body;
+  if (!paper_id || !type || !question_text || !marks)
+    return res.status(400).json({ error: 'paper_id, type, question_text, marks required' });
+  if (type === 'mcq' && (!option_a || !option_b || !correct_option))
+    return res.status(400).json({ error: 'MCQ needs option_a, option_b and correct_option' });
+  try {
+    const { rows: countRows } = await pool.query('SELECT COUNT(*) FROM questions WHERE paper_id=$1', [paper_id]);
+    const order_index = parseInt(countRows[0].count);
+    const { rows } = await pool.query(
+      `INSERT INTO questions (paper_id, order_index, type, question_text, marks,
+       option_a, option_b, option_c, option_d, correct_option, explanation)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [paper_id, order_index, type, question_text, marks,
+       option_a||null, option_b||null, option_c||null, option_d||null,
+       correct_option||null, explanation||null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/questions/:id
+app.put('/api/questions/:id', auth(['faculty','moderator']), async (req, res) => {
+  const { question_text, marks, option_a, option_b, option_c, option_d, correct_option, explanation, mod_status, mod_comment } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE questions SET
+       question_text=COALESCE($1,question_text),
+       marks=COALESCE($2,marks),
+       option_a=COALESCE($3,option_a), option_b=COALESCE($4,option_b),
+       option_c=COALESCE($5,option_c), option_d=COALESCE($6,option_d),
+       correct_option=COALESCE($7,correct_option),
+       explanation=COALESCE($8,explanation),
+       mod_status=COALESCE($9,mod_status),
+       mod_comment=COALESCE($10,mod_comment)
+       WHERE id=$11 RETURNING *`,
+      [question_text, marks, option_a, option_b, option_c, option_d,
+       correct_option, explanation, mod_status, mod_comment, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/questions/:id
+app.delete('/api/questions/:id', auth(['faculty']), async (req, res) => {
+  try {
+    await pool.query('DELETE FROM questions WHERE id=$1', [req.params.id]);
+    res.json({ deleted: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════
+// EXAMS (Admin)
+// ══════════════════════════════════════════════════════════════
+
+app.get('/api/exams', auth(), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT e.*, s.name as subject_name, s.code as subject_code,
+       qp.title as paper_title, qp.duration_mins,
+       COUNT(DISTINCT er.id) as room_count,
+       COUNT(DISTINCT es.id) as student_count
+       FROM exams e
+       JOIN subjects s ON s.id = e.subject_id
+       JOIN question_papers qp ON qp.id = e.paper_id
+       LEFT JOIN exam_rooms er ON er.exam_id = e.id
+       LEFT JOIN exam_seats es ON es.exam_id = e.id
+       GROUP BY e.id, s.name, s.code, qp.title, qp.duration_mins
+       ORDER BY e.scheduled_at DESC`
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/exams', auth(['admin']), async (req, res) => {
+  const { subject_id, paper_id, title, scheduled_at, ends_at } = req.body;
+  if (!subject_id || !paper_id || !title || !scheduled_at || !ends_at)
+    return res.status(400).json({ error: 'All fields required' });
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO exams (subject_id, paper_id, title, scheduled_at, ends_at, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [subject_id, paper_id, title, scheduled_at, ends_at, req.user.id]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/exams/:id — full detail with rooms + seats
+app.get('/api/exams/:id', auth(), async (req, res) => {
+  try {
+    const { rows: exams } = await pool.query(
+      `SELECT e.*, s.name as subject_name, qp.title as paper_title, qp.duration_mins
+       FROM exams e JOIN subjects s ON s.id=e.subject_id JOIN question_papers qp ON qp.id=e.paper_id
+       WHERE e.id=$1`, [req.params.id]
+    );
+    if (!exams[0]) return res.status(404).json({ error: 'Exam not found' });
+    const { rows: rooms } = await pool.query(
+      `SELECT er.*, u.name as proctor_name,
+       COUNT(es.id) as seat_count
+       FROM exam_rooms er LEFT JOIN users u ON u.id=er.proctor_id
+       LEFT JOIN exam_seats es ON es.room_id=er.id
+       WHERE er.exam_id=$1 GROUP BY er.id, u.name ORDER BY er.name`, [req.params.id]
+    );
+    res.json({ ...exams[0], rooms });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/exams/:id/rooms
+app.post('/api/exams/:id/rooms', auth(['admin']), async (req, res) => {
+  const { name, proctor_id, capacity } = req.body;
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO exam_rooms (exam_id, name, proctor_id, capacity) VALUES ($1,$2,$3,$4) RETURNING *',
+      [req.params.id, name, proctor_id || null, capacity || 30]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/exams/:id/seats — bulk assign students to rooms
+app.post('/api/exams/:id/seats', auth(['admin']), async (req, res) => {
+  const assignments = req.body; // [{ student_id, room_id }]
+  if (!Array.isArray(assignments)) return res.status(400).json({ error: 'Array required' });
+  try {
+    let count = 0;
+    for (const { student_id, room_id } of assignments) {
+      await pool.query(
+        `INSERT INTO exam_seats (exam_id, room_id, student_id)
+         VALUES ($1,$2,$3) ON CONFLICT (exam_id, student_id) DO UPDATE SET room_id=$2`,
+        [req.params.id, room_id, student_id]
+      );
+      count++;
+    }
+    res.json({ assigned: count });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════
+// STUDENT EXAM SESSION
+// ══════════════════════════════════════════════════════════════
+
+// GET /api/student/exam — get active exam for logged in student
+app.get('/api/student/exam', auth(['student']), async (req, res) => {
+  try {
+    const now = new Date();
+    const { rows } = await pool.query(
+      `SELECT e.id as exam_id, e.title, e.scheduled_at, e.ends_at,
+       qp.duration_mins, qp.instructions, qp.id as paper_id,
+       s.name as subject_name, s.code as subject_code,
+       es.id as seat_id, es.room_id, es.status as seat_status
+       FROM exam_seats es
+       JOIN exams e ON e.id = es.exam_id
+       JOIN question_papers qp ON qp.id = e.paper_id
+       JOIN subjects s ON s.id = e.subject_id
+       WHERE es.student_id = $1
+       AND e.scheduled_at <= $2 AND e.ends_at >= $2
+       AND e.status IN ('scheduled','live')
+       AND es.status IN ('pending','active')
+       LIMIT 1`,
+      [req.user.id, now]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'No active exam found for you right now' });
+
+    // Get questions (hide correct answers)
+    const { rows: questions } = await pool.query(
+      `SELECT id, order_index, type, question_text, marks,
+       option_a, option_b, option_c, option_d
+       FROM questions WHERE paper_id=$1
+       AND mod_status='approved'
+       ORDER BY order_index`,
+      [rows[0].paper_id]
+    );
+
+    // Mark seat as active
+    await pool.query(
+      `UPDATE exam_seats SET status='active', started_at=COALESCE(started_at,NOW()) WHERE id=$1`,
+      [rows[0].seat_id]
+    );
+
+    res.json({ ...rows[0], questions });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/student/answer — save answer
+app.post('/api/student/answer', auth(['student']), async (req, res) => {
+  const { seat_id, question_id, answer_text, answer_option } = req.body;
+  try {
+    // Check if MCQ is correct
+    let is_correct = null;
+    if (answer_option) {
+      const { rows } = await pool.query('SELECT correct_option FROM questions WHERE id=$1', [question_id]);
+      if (rows[0]) is_correct = rows[0].correct_option === answer_option;
+    }
+    await pool.query(
+      `INSERT INTO answers (seat_id, question_id, answer_text, answer_option, is_correct)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (seat_id, question_id) DO UPDATE
+       SET answer_text=$3, answer_option=$4, is_correct=$5`,
+      [seat_id, question_id, answer_text||null, answer_option||null, is_correct]
+    );
+    res.json({ saved: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/student/submit
+app.post('/api/student/submit', auth(['student']), async (req, res) => {
+  const { seat_id } = req.body;
+  try {
+    // Get seat info
+    const { rows: seats } = await pool.query(
+      `SELECT es.*, e.paper_id, e.id as exam_id, e.subject_id
+       FROM exam_seats es JOIN exams e ON e.id=es.exam_id
+       WHERE es.id=$1 AND es.student_id=$2`,
+      [seat_id, req.user.id]
+    );
+    if (!seats[0]) return res.status(404).json({ error: 'Seat not found' });
+    const seat = seats[0];
+
+    // Get paper total marks
+    const { rows: papers } = await pool.query('SELECT total_marks FROM question_papers WHERE id=$1', [seat.paper_id]);
+    const maxMarks = papers[0]?.total_marks || 100;
+
+    // Auto-grade MCQs
+    const { rows: mcqAnswers } = await pool.query(
+      `SELECT a.*, q.marks FROM answers a JOIN questions q ON q.id=a.question_id
+       WHERE a.seat_id=$1 AND q.type='mcq'`, [seat_id]
+    );
+    const mcqMarks = mcqAnswers.reduce((sum, a) => sum + (a.is_correct ? parseFloat(a.marks) : 0), 0);
+
+    // Get violation count
+    const { rows: viol } = await pool.query('SELECT COUNT(*) FROM violations WHERE seat_id=$1', [seat_id]);
+    const violCount = parseInt(viol[0].count);
+
+    // Mark submitted
+    await pool.query('UPDATE exam_seats SET status=$1, submitted_at=NOW() WHERE id=$2', ['submitted', seat_id]);
+
+    // Save result
+    const pct = maxMarks > 0 ? (mcqMarks / maxMarks * 100) : 0;
+    const grade = pct >= 90 ? 'A+' : pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : pct >= 50 ? 'D' : 'F';
+    await pool.query(
+      `INSERT INTO results (seat_id, exam_id, student_id, subject_id, mcq_marks, total_marks, max_marks, percentage, grade, violation_count)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (seat_id) DO UPDATE SET mcq_marks=$5, total_marks=$6, percentage=$8, grade=$9`,
+      [seat_id, seat.exam_id, req.user.id, seat.subject_id, mcqMarks, mcqMarks, maxMarks, pct.toFixed(2), grade, violCount]
+    );
+
+    res.json({ submitted: true, mcq_marks: mcqMarks, grade });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════
+// VIOLATIONS
+// ══════════════════════════════════════════════════════════════
+
+app.post('/api/violations', auth(['student']), async (req, res) => {
+  const { seat_id, type, severity } = req.body;
+  try {
+    await pool.query('INSERT INTO violations (seat_id, type, severity) VALUES ($1,$2,$3)', [seat_id, type, severity || 'med']);
+    res.json({ logged: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════
+// RESULTS (Faculty grading essays)
+// ══════════════════════════════════════════════════════════════
+
+app.get('/api/results', auth(['admin','faculty']), async (req, res) => {
+  const { exam_id } = req.query;
+  try {
+    const { rows } = await pool.query(
+      `SELECT r.*, u.name as student_name, u.roll_number,
+       e.title as exam_title, s.name as subject_name
+       FROM results r
+       JOIN users u ON u.id=r.student_id
+       JOIN exams e ON e.id=r.exam_id
+       JOIN subjects s ON s.id=r.subject_id
+       WHERE ($1::int IS NULL OR r.exam_id=$1)
+       ORDER BY u.name`,
+      [exam_id || null]
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /api/answers/:id/grade — faculty grades essay
+app.patch('/api/answers/:id/grade', auth(['faculty','admin']), async (req, res) => {
+  const { marks_awarded, faculty_note } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE answers SET marks_awarded=$1, faculty_note=$2, graded_by=$3, graded_at=NOW()
+       WHERE id=$4 RETURNING *`,
+      [marks_awarded, faculty_note || null, req.user.id, req.params.id]
+    );
+    // Recalculate total
+    const answer = rows[0];
+    const { rows: allAnswers } = await pool.query(
+      `SELECT a.marks_awarded, a.is_correct, q.marks, q.type
+       FROM answers a JOIN questions q ON q.id=a.question_id
+       WHERE a.seat_id=$1`, [answer.seat_id]
+    );
+    const mcq   = allAnswers.filter(a => a.type==='mcq').reduce((s,a) => s+(a.is_correct ? parseFloat(a.marks) : 0), 0);
+    const essay = allAnswers.filter(a => a.type==='essay').reduce((s,a) => s+(parseFloat(a.marks_awarded)||0), 0);
+    await pool.query(
+      'UPDATE results SET essay_marks=$1, total_marks=$2 WHERE seat_id=$3',
+      [essay, mcq+essay, answer.seat_id]
+    );
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════
+// SOCKET.IO — LIVE PROCTORING
+// ══════════════════════════════════════════════════════════════
+
 const sessions = new Map();
-const violations = [];
 
 io.on('connection', (socket) => {
-
-  // STUDENT joins
-  socket.on('student:join', ({ studentId, examId, name, roll }) => {
-    sessions.set(studentId, { socketId: socket.id, examId, name, roll, progress: 0, violations: 0, status: 'active' });
-    socket.join(`exam:${examId}`);
-    io.to(`proctors:${examId}`).emit('student:online', { studentId, name, roll, progress: 0, violations: 0, status: 'active' });
-    console.log(`✅ Student joined: ${name} (${roll})`);
+  socket.on('student:join', ({ studentId, examId, roomId, name, roll }) => {
+    sessions.set(studentId, { socketId: socket.id, examId, roomId, name, roll, progress: 0, violations: 0, status: 'active' });
+    socket.join(`room:${roomId}`);
+    io.to(`proctor:${roomId}`).emit('student:online', { studentId, name, roll, progress: 0, violations: 0, status: 'active' });
   });
 
-  // PROCTOR joins
-  socket.on('proctor:join', ({ examId }) => {
-    socket.join(`proctors:${examId}`);
-    const snapshot = [];
+  socket.on('proctor:join', ({ proctorId, roomId }) => {
+    socket.join(`proctor:${roomId}`);
+    const roomStudents = [];
     sessions.forEach((data, studentId) => {
-      if (data.examId === examId) snapshot.push({ studentId, ...data });
+      if (data.roomId === roomId) roomStudents.push({ studentId, ...data });
     });
-    socket.emit('sessions:snapshot', snapshot);
-    console.log(`🛡 Proctor joined exam: ${examId}`);
+    socket.emit('sessions:snapshot', roomStudents);
   });
 
-  // WebRTC: proctor requests stream from a student
-  socket.on('webrtc:request', ({ studentId }) => {
-    const session = sessions.get(studentId);
-    if (session) {
-      io.to(session.socketId).emit('webrtc:request', { proctorSocketId: socket.id });
-      console.log(`📹 Proctor requesting video from ${studentId}`);
-    }
-  });
-
-  // WebRTC: student sends offer to proctor
-  socket.on('webrtc:offer', ({ proctorSocketId, offer, studentId }) => {
-    io.to(proctorSocketId).emit('webrtc:offer', { offer, studentId, studentSocketId: socket.id });
-  });
-
-  // WebRTC: proctor sends answer back to student
-  socket.on('webrtc:answer', ({ studentSocketId, answer }) => {
-    io.to(studentSocketId).emit('webrtc:answer', { answer });
-  });
-
-  // WebRTC: ICE candidate relay (both directions)
-  socket.on('webrtc:ice', ({ targetSocketId, candidate }) => {
-    io.to(targetSocketId).emit('webrtc:ice', { candidate, fromSocketId: socket.id });
-  });
-
-  // VIOLATION reported
-  socket.on('violation:report', ({ studentId, examId, type, severity, studentName }) => {
-    const entry = { studentId, studentName, type, severity, ts: new Date().toISOString() };
-    violations.push(entry);
+  socket.on('violation:report', ({ studentId, roomId, type, severity, studentName }) => {
     if (sessions.has(studentId)) {
       sessions.get(studentId).violations++;
       if (sessions.get(studentId).violations >= 5) sessions.get(studentId).status = 'flagged';
       else if (sessions.get(studentId).violations >= 2) sessions.get(studentId).status = 'warn';
     }
-    io.to(`proctors:${examId}`).emit('violation:new', {
-      ...entry,
+    io.to(`proctor:${roomId}`).emit('violation:new', {
+      studentId, studentName, type, severity,
       totalViolations: sessions.get(studentId)?.violations || 0,
       studentStatus: sessions.get(studentId)?.status || 'active'
     });
   });
 
-  // ANSWER saved
-  socket.on('answer:save', ({ studentId, questionId, answer }) => {
-    if (sessions.has(studentId)) {
-      const s = sessions.get(studentId);
-      s.answers = s.answers || {};
-      s.answers[questionId] = answer;
-    }
-  });
-
-  // PROGRESS update
-  socket.on('progress:update', ({ studentId, examId, progress }) => {
+  socket.on('progress:update', ({ studentId, roomId, progress }) => {
     if (sessions.has(studentId)) sessions.get(studentId).progress = progress;
-    io.to(`proctors:${examId}`).emit('student:progress', { studentId, progress });
+    io.to(`proctor:${roomId}`).emit('student:progress', { studentId, progress });
   });
 
-  // EXAM submitted
-  socket.on('exam:submit', ({ studentId, examId }) => {
+  socket.on('exam:submit', ({ studentId, roomId }) => {
     if (sessions.has(studentId)) sessions.get(studentId).status = 'submitted';
-    io.to(`proctors:${examId}`).emit('student:submitted', { studentId });
-    console.log(`📤 Exam submitted: ${studentId}`);
+    io.to(`proctor:${roomId}`).emit('student:submitted', { studentId });
   });
 
-  // PROCTOR warns student
   socket.on('proctor:warn', ({ studentId, message }) => {
     const session = sessions.get(studentId);
     if (session) io.to(session.socketId).emit('warning:received', { message });
   });
 
-  // PROCTOR terminates student
-  socket.on('proctor:terminate', ({ studentId, examId }) => {
+  socket.on('proctor:terminate', ({ studentId, roomId }) => {
     const session = sessions.get(studentId);
     if (session) {
       session.status = 'terminated';
       io.to(session.socketId).emit('exam:terminated', {});
-      io.to(`proctors:${examId}`).emit('student:terminated', { studentId });
+      io.to(`proctor:${roomId}`).emit('student:terminated', { studentId });
     }
   });
 
-  // DISCONNECT
+  // WebRTC
+  socket.on('webrtc:request', ({ studentId }) => {
+    const session = sessions.get(studentId);
+    if (session) io.to(session.socketId).emit('webrtc:request', { proctorSocketId: socket.id });
+  });
+  socket.on('webrtc:offer', ({ proctorSocketId, offer, studentId }) => {
+    io.to(proctorSocketId).emit('webrtc:offer', { offer, studentId, studentSocketId: socket.id });
+  });
+  socket.on('webrtc:answer', ({ studentSocketId, answer }) => {
+    io.to(studentSocketId).emit('webrtc:answer', { answer });
+  });
+  socket.on('webrtc:ice', ({ targetSocketId, candidate }) => {
+    io.to(targetSocketId).emit('webrtc:ice', { candidate, fromSocketId: socket.id });
+  });
+
   socket.on('disconnect', () => {
     sessions.forEach((data, studentId) => {
       if (data.socketId === socket.id) {
         data.status = 'offline';
-        io.to(`proctors:${data.examId}`).emit('student:offline', { studentId });
-        console.log(`❌ Student disconnected: ${data.name}`);
+        io.to(`proctor:${data.roomId}`).emit('student:offline', { studentId });
       }
     });
   });
@@ -132,7 +742,10 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`\n🎓 ProctorGuard running on port ${PORT}`);
-  console.log(`   Student URL: http://localhost:${PORT}/student`);
-  console.log(`   Proctor URL: http://localhost:${PORT}/proctor\n`);
+  console.log(`\n🎓 ProctorGuard v2 running on port ${PORT}`);
+  console.log(`   Login:    http://localhost:${PORT}/login`);
+  console.log(`   Admin:    http://localhost:${PORT}/admin`);
+  console.log(`   Faculty:  http://localhost:${PORT}/faculty`);
+  console.log(`   Proctor:  http://localhost:${PORT}/proctor`);
+  console.log(`   Student:  http://localhost:${PORT}/student\n`);
 });
