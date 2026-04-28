@@ -15,9 +15,11 @@ const server = http.createServer(app);
 const io     = new Server(server, { cors: { origin: '*' } });
 
 // ── DB ──────────────────────────────────────────────────────
+
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: { rejectUnauthorized: false }  // Supabase always needs SSL
 });
 
 const SECRET = process.env.JWT_SECRET || 'proctorguard-secret-2024';
