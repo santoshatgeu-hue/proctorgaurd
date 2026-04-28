@@ -19,7 +19,8 @@ const io     = new Server(server, { cors: { origin: '*' } });
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }  // Supabase always needs SSL
+  ssl: { rejectUnauthorized: false },
+  max: 10
 });
 
 const SECRET = process.env.JWT_SECRET || 'proctorguard-secret-2024';
