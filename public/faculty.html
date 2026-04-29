@@ -1050,13 +1050,25 @@ const API = '';  // same origin
 // =============================================
 document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('token');
-  const user = JSON.parse(localStorage.getItem('user') || 'null');
 
-  if (!token || !user) {
+  if (!token) {
     window.location.href = '/';
     return;
   }
-  if (user.role !== 'faculty') {
+
+  // Decode JWT payload (no library needed)
+  let user = null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    user = payload;
+  } catch(e) {
+    window.location.href = '/';
+    return;
+  }
+
+  // Check role — adjust the value below if yours differs
+  const role = (user.role || user.Role || '').toString().toLowerCase();
+  if (role !== 'faculty') {
     toast('Access denied: Faculty only', 'error');
     setTimeout(() => window.location.href = '/', 1500);
     return;
