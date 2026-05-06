@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProctorGuard — Moderator Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f4f0;
+    --surface: #ffffff;
+    --surface2: #f0ede6;
+    --border: #e2ddd5;
+    --accent: #1a3a5c;
+    --accent2: #2e6da4;
+    --gold: #c8922a;
+    --text: #1c1c1c;
+    --text-muted: #6b6560;
+    --success: #1e6b4a;
+    --success-bg: #e6f4ed;
+    --warning: #8a5c00;
+    --warning-bg: #fff5e0;
+    --danger: #8b1a1a;
+    --danger-bg: #fdeaea;
+    --info: #1a4a7a;
+    --info-bg: #e6f0fb;
+    --radius: 10px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.07);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+
+  /* TOPBAR */
+  .topbar { background: var(--accent); color: white; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 58px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+  .topbar-brand { display: flex; align-items: center; gap: 10px; }
+  .topbar-brand .logo-icon { width: 34px; height: 34px; background: var(--gold); border-radius: 8px; display: grid; place-items: center; font-size: 18px; }
+  .topbar-brand h1 { font-family: 'DM Serif Display', serif; font-size: 18px; font-weight: 400; }
+  .topbar-brand span { font-size: 11px; opacity: 0.6; margin-left: 2px; }
+  .topbar-right { display: flex; align-items: center; gap: 16px; }
+  .avatar { width: 32px; height: 32px; background: var(--gold); border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 13px; color: white; }
+  .btn-logout { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: 'DM Sans', sans-serif; transition: background 0.2s; }
+  .btn-logout:hover { background: rgba(255,255,255,0.22); }
+
+  /* LAYOUT */
+  .layout { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 58px); }
+
+  /* SIDEBAR */
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 24px 0; position: sticky; top: 58px; height: calc(100vh - 58px); overflow-y: auto; }
+  .sidebar-section { padding: 0 16px 20px; }
+  .sidebar-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); padding: 0 8px 8px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; cursor: pointer; transition: all 0.15s; color: var(--text-muted); font-size: 13.5px; border: none; background: none; width: 100%; text-align: left; font-family: 'DM Sans', sans-serif; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: #e8f0f9; color: var(--accent2); font-weight: 600; }
+  .nav-item .icon { font-size: 16px; width: 22px; text-align: center; }
+  .nav-badge { margin-left: auto; background: var(--gold); color: white; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; }
+  .sidebar-divider { height: 1px; background: var(--border); margin: 4px 16px 16px; }
+
+  /* MAIN */
+  .main { padding: 28px 32px; overflow-y: auto; }
+  .page { display: none; }
+  .page.active { display: block; animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+
+  .page-header { margin-bottom: 24px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .page-title { font-family: 'DM Serif Display', serif; font-size: 26px; font-weight: 400; color: var(--accent); }
+  .page-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+  /* CARDS */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .card-title { font-weight: 600; font-size: 14px; color: var(--accent); }
+  .card-body { padding: 20px; }
+
+  /* STATS */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; display: flex; align-items: center; gap: 14px; }
+  .stat-icon { width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center; font-size: 20px; flex-shrink: 0; }
+  .stat-val { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .stat-lbl { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  /* BUTTONS */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 7px; font-size: 13px; font-family: 'DM Sans', sans-serif; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; white-space: nowrap; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #122a45; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-success { background: var(--success); color: white; }
+  .btn-success:hover { background: #155237; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-danger:hover { background: #6b1212; }
+  .btn-gold { background: var(--gold); color: white; }
+  .btn-sm { padding: 5px 11px; font-size: 12px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* BADGE */
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .badge-draft { background: var(--surface2); color: var(--text-muted); }
+  .badge-submitted { background: var(--warning-bg); color: var(--warning); }
+  .badge-review { background: var(--info-bg); color: var(--info); }
+  .badge-approved { background: var(--success-bg); color: var(--success); }
+  .badge-rejected { background: var(--danger-bg); color: var(--danger); }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); padding: 10px 16px; background: var(--surface2); border-bottom: 1px solid var(--border); }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody td { padding: 12px 16px; font-size: 13px; vertical-align: middle; }
+
+  /* PAPERS GRID */
+  .papers-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+  .paper-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; transition: box-shadow 0.15s; position: relative; overflow: hidden; }
+  .paper-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+  .paper-card.status-submitted::before { background: var(--gold); }
+  .paper-card.status-under_review::before { background: var(--accent2); }
+  .paper-card.status-approved::before { background: var(--success); }
+  .paper-card.status-rejected::before { background: var(--danger); }
+  .paper-card:hover { box-shadow: var(--shadow-lg); }
+  .paper-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; gap: 10px; }
+  .paper-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .paper-meta-row { font-size: 12px; color: var(--text-muted); display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .paper-footer { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+
+  /* MODAL */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; display: none; place-items: center; padding: 20px; backdrop-filter: blur(2px); }
+  .modal-overlay.open { display: grid; }
+  .modal { background: var(--surface); border-radius: 14px; box-shadow: var(--shadow-lg); width: 100%; max-width: 800px; max-height: 92vh; overflow-y: auto; animation: modalIn 0.22s ease; }
+  .modal-sm { max-width: 480px; }
+  @keyframes modalIn { from { opacity: 0; transform: scale(0.96) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+  .modal-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .modal-title { font-family: 'DM Serif Display', serif; font-size: 19px; color: var(--accent); }
+  .modal-body { padding: 22px 24px; }
+  .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+  .close-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); line-height: 1; padding: 2px 6px; border-radius: 4px; }
+  .close-btn:hover { color: var(--text); background: var(--surface2); }
+
+  /* FORM */
+  .form-group { margin-bottom: 16px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  input, select, textarea { width: 100%; padding: 9px 12px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 13.5px; font-family: 'DM Sans', sans-serif; color: var(--text); background: var(--surface); transition: border-color 0.15s; outline: none; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent2); }
+  textarea { resize: vertical; min-height: 90px; }
+
+  /* QUESTION REVIEW */
+  .question-list { display: flex; flex-direction: column; gap: 12px; }
+  .question-item { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+  .question-item.q-flagged { border-color: var(--danger); background: #fff8f8; }
+  .q-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+  .q-number { width: 26px; height: 26px; background: var(--accent); color: white; border-radius: 50%; font-size: 11px; font-weight: 700; display: grid; place-items: center; flex-shrink: 0; }
+  .q-text { font-size: 13.5px; font-weight: 500; flex: 1; line-height: 1.5; }
+  .q-meta { display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .q-options { margin-top: 10px; display: grid; gap: 5px; }
+  .q-opt { font-size: 12.5px; padding: 6px 10px; border-radius: 5px; background: var(--surface2); color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+  .q-opt.correct { background: var(--success-bg); color: var(--success); font-weight: 600; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: var(--surface2); color: var(--text-muted); }
+  .chip-blue { background: var(--info-bg); color: var(--info); }
+  .chip-green { background: var(--success-bg); color: var(--success); }
+  .chip-gold { background: #fff3d6; color: var(--gold); }
+
+  /* DECISION BOX */
+  .decision-box { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-top: 20px; }
+  .decision-box h3 { font-size: 14px; font-weight: 600; margin-bottom: 14px; color: var(--accent); }
+  .decision-btns { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+
+  /* EMPTY */
+  .empty { text-align: center; padding: 48px 24px; color: var(--text-muted); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.5; }
+  .empty h3 { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+
+  /* TOAST */
+  #toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+  .toast { padding: 12px 18px; border-radius: 9px; font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg); display: flex; align-items: center; gap: 8px; animation: toastIn 0.25s ease; min-width: 260px; }
+  @keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; } }
+  .toast-success { background: var(--success); color: white; }
+  .toast-error { background: var(--danger); color: white; }
+  .toast-info { background: var(--accent2); color: white; }
+
+  /* LOADING */
+  .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.7); z-index: 500; display: none; place-items: center; }
+  .loading-overlay.show { display: grid; }
+  .big-spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent2); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .section-sep { height: 1px; background: var(--border); margin: 16px 0; }
+  .flex { display: flex; align-items: center; gap: 8px; }
+  .paper-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .info-item { background: var(--surface2); padding: 10px 14px; border-radius: 8px; }
+  .info-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 3px; }
+  .info-val { font-size: 14px; font-weight: 600; color: var(--accent); }
+
+  /* Priority indicator */
+  .priority-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 4px; }
+  .priority-new { background: var(--warning-bg); color: var(--warning); }
+  .priority-review { background: var(--info-bg); color: var(--info); }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <div class="logo-icon">🔍</div>
+    <h1>ProctorGuard <span>/ Moderator</span></h1>
+  </div>
+  <div class="topbar-right">
+    <div class="flex">
+      <div class="avatar" id="userAvatar">M</div>
+      <span style="font-size:13px" id="userNameDisplay">Moderator</span>
+    </div>
+    <button class="btn-logout" onclick="logout()">Sign Out</button>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Navigation</div>
+      <button class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard">
+        <span class="icon">🏠</span> Dashboard
+      </button>
+      <button class="nav-item" onclick="showPage('queue')" id="nav-queue">
+        <span class="icon">📋</span> Review Queue
+        <span class="nav-badge" id="queueBadge" style="display:none">0</span>
+      </button>
+      <button class="nav-item" onclick="showPage('history')" id="nav-history">
+        <span class="icon">📁</span> History
+      </button>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Filter by Status</div>
+      <button class="nav-item" onclick="filterHistory('approved')" id="nav-approved">
+        <span class="icon">✅</span> Approved
+      </button>
+      <button class="nav-item" onclick="filterHistory('rejected')" id="nav-rejected">
+        <span class="icon">❌</span> Rejected
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Moderator Dashboard</div>
+          <div class="page-subtitle" id="dashWelcome">Loading...</div>
+        </div>
+        <button class="btn btn-primary" onclick="showPage('queue')">📋 Open Review Queue</button>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:var(--warning-bg)">⏳</div>
+          <div><div class="stat-val" id="statPending">—</div><div class="stat-lbl">Awaiting Review</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:var(--info-bg)">🔍</div>
+          <div><div class="stat-val" id="statInReview">—</div><div class="stat-lbl">Under Review</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:var(--success-bg)">✅</div>
+          <div><div class="stat-val" id="statApproved">—</div><div class="stat-lbl">Approved</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:var(--danger-bg)">❌</div>
+          <div><div class="stat-val" id="statRejected">—</div><div class="stat-lbl">Rejected</div></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Papers Awaiting Review</span></div>
+          <div id="dashQueue"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Recently Moderated</span></div>
+          <div id="dashRecent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REVIEW QUEUE -->
+    <div class="page" id="page-queue">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Review Queue</div>
+          <div class="page-subtitle">Papers submitted by faculty awaiting moderation</div>
+        </div>
+        <button class="btn btn-secondary" onclick="loadAll()">🔄 Refresh</button>
+      </div>
+      <div class="papers-grid" id="queueGrid">
+        <div class="empty" style="grid-column:1/-1"><div class="empty-icon">📋</div><p>Loading queue...</p></div>
+      </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="page" id="page-history">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Moderation History</div>
+          <div class="page-subtitle" id="historyLabel">All moderated papers</div>
+        </div>
+        <select id="historyFilter" onchange="onHistoryFilterChange()" style="width:160px">
+          <option value="">All</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Paper Title</th>
+                <th>Subject</th>
+                <th>Faculty</th>
+                <th>Status</th>
+                <th>Questions</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="historyTable">
+              <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted)">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ===== REVIEW MODAL ===== -->
+<div class="modal-overlay" id="reviewModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="reviewModalTitle">Review Paper</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:3px" id="reviewModalSubtitle"></div>
+      </div>
+      <button class="close-btn" onclick="closeModal('reviewModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Paper Info -->
+      <div class="paper-info-grid" id="reviewPaperInfo"></div>
+
+      <div class="section-sep"></div>
+
+      <!-- Questions -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <h3 style="font-size:14px;font-weight:600;color:var(--accent)">Questions (<span id="reviewQCount">0</span>)</h3>
+      </div>
+      <div class="question-list" id="reviewQuestions"></div>
+
+      <!-- Decision -->
+      <div class="decision-box" id="decisionBox">
+        <h3>Moderation Decision</h3>
+        <div class="form-group">
+          <label>Comments / Feedback for Faculty</label>
+          <textarea id="moderatorNote" placeholder="Add feedback for the faculty member (required for rejection, optional for approval)..."></textarea>
+        </div>
+        <div class="decision-btns">
+          <button class="btn btn-success" onclick="moderate('approve')">✅ Approve Paper</button>
+          <button class="btn btn-danger" onclick="moderate('reject')">❌ Reject Paper</button>
+        </div>
+      </div>
+
+      <!-- Already decided -->
+      <div id="alreadyDecided" style="display:none;margin-top:20px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('reviewModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div style="text-align:center">
+    <div class="big-spinner"></div>
+    <div style="font-size:13px;color:var(--text-muted)" id="loadingMsg">Loading...</div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+// =============================================
+//  STATE
+// =============================================
+let STATE = {
+  user: null,
+  token: null,
+  papers: [],       // submitted/under_review papers
+  allPapers: [],    // all papers including history
+  currentPaper: null,
+  currentQuestions: [],
+  historyFilter: '',
+};
+
+// =============================================
+//  INIT
+// =============================================
+document.addEventListener('DOMContentLoaded', async () => {
+  const token = localStorage.getItem('pg_token');
+  const user = JSON.parse(localStorage.getItem('pg_user') || 'null');
+
+  if (!token || !user) { window.location.href = '/'; return; }
+  if (user.role !== 'moderator') {
+    toast('Access denied: Moderator only', 'error');
+    setTimeout(() => window.location.href = '/', 1500);
+    return;
+  }
+
+  STATE.token = token;
+  STATE.user = user;
+
+  document.getElementById('userNameDisplay').textContent = user.name || user.email;
+  document.getElementById('userAvatar').textContent = (user.name || user.email || 'M')[0].toUpperCase();
+  document.getElementById('dashWelcome').textContent = `Welcome, ${user.name || user.email} — papers awaiting your review`;
+
+  await loadAll();
+  renderDashboard();
+});
+
+// =============================================
+//  API
+// =============================================
+async function api(method, path, body) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${STATE.token}` }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(path, opts);
+  if (res.status === 401) { logout(); return null; }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || data.message || 'Request failed');
+  return data;
+}
+
+// =============================================
+//  LOAD
+// =============================================
+async function loadAll() {
+  showLoader('Loading papers...');
+  try {
+    const data = await api('GET', '/api/papers');
+    STATE.allPapers = Array.isArray(data) ? data : [];
+    STATE.papers = STATE.allPapers.filter(p => ['submitted','under_review'].includes(p.status));
+    updateQueueBadge();
+  } catch(e) {
+    toast('Failed to load papers', 'error');
+  }
+  hideLoader();
+}
+
+// =============================================
+//  NAVIGATION
+// =============================================
+function showPage(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + pageId)?.classList.add('active');
+  document.getElementById('nav-' + pageId)?.classList.add('active');
+  if (pageId === 'dashboard') renderDashboard();
+  if (pageId === 'queue') renderQueue();
+  if (pageId === 'history') renderHistory();
+}
+
+function filterHistory(status) {
+  STATE.historyFilter = status;
+  document.getElementById('historyFilter').value = status;
+  showPage('history');
+}
+
+function onHistoryFilterChange() {
+  STATE.historyFilter = document.getElementById('historyFilter').value;
+  renderHistory();
+}
+
+// =============================================
+//  DASHBOARD
+// =============================================
+function renderDashboard() {
+  const all = STATE.allPapers;
+  const pending = all.filter(p => p.status === 'submitted').length;
+  const inReview = all.filter(p => p.status === 'under_review').length;
+  const approved = all.filter(p => p.status === 'approved').length;
+  const rejected = all.filter(p => p.status === 'rejected').length;
+
+  document.getElementById('statPending').textContent = pending;
+  document.getElementById('statInReview').textContent = inReview;
+  document.getElementById('statApproved').textContent = approved;
+  document.getElementById('statRejected').textContent = rejected;
+
+  // Queue list
+  const queue = all.filter(p => ['submitted','under_review'].includes(p.status)).slice(0,5);
+  const qEl = document.getElementById('dashQueue');
+  if (!queue.length) {
+    qEl.innerHTML = `<div class="empty"><div class="empty-icon">🎉</div><h3>All clear!</h3><p>No papers awaiting review</p></div>`;
+  } else {
+    qEl.innerHTML = `<table><thead><tr><th>Title</th><th>Faculty</th><th>Status</th></tr></thead><tbody>
+      ${queue.map(p => `<tr style="cursor:pointer" onclick="openReview(${p.id})">
+        <td><strong>${esc(p.title)}</strong><div style="font-size:11px;color:var(--text-muted)">${esc(p.subject_name||'')}</div></td>
+        <td style="font-size:12px">${esc(p.faculty_name||'—')}</td>
+        <td>${statusBadge(p.status)}</td>
+      </tr>`).join('')}
+    </tbody></table>`;
+  }
+
+  // Recent
+  const recent = all.filter(p => ['approved','rejected'].includes(p.status))
+    .sort((a,b) => new Date(b.updated_at||b.created_at) - new Date(a.updated_at||a.created_at)).slice(0,5);
+  const rEl = document.getElementById('dashRecent');
+  if (!recent.length) {
+    rEl.innerHTML = `<div class="empty"><div class="empty-icon">📁</div><p>No history yet</p></div>`;
+  } else {
+    rEl.innerHTML = `<table><thead><tr><th>Title</th><th>Status</th></tr></thead><tbody>
+      ${recent.map(p => `<tr style="cursor:pointer" onclick="openReview(${p.id})">
+        <td><strong>${esc(p.title)}</strong><div style="font-size:11px;color:var(--text-muted)">${esc(p.faculty_name||'')}</div></td>
+        <td>${statusBadge(p.status)}</td>
+      </tr>`).join('')}
+    </tbody></table>`;
+  }
+}
+
+// =============================================
+//  QUEUE
+// =============================================
+function renderQueue() {
+  const el = document.getElementById('queueGrid');
+  const queue = STATE.allPapers.filter(p => ['submitted','under_review'].includes(p.status));
+
+  if (!queue.length) {
+    el.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🎉</div><h3>Queue is empty!</h3><p>All submitted papers have been reviewed.</p></div>`;
+    return;
+  }
+
+  el.innerHTML = queue.map(p => `
+    <div class="paper-card status-${p.status}">
+      <div class="paper-card-header">
+        <div style="flex:1">
+          <div class="paper-title">${esc(p.title)}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:3px">${esc(p.subject_name||'')} ${p.subject_code ? '· '+esc(p.subject_code) : ''}</div>
+        </div>
+        ${statusBadge(p.status)}
+      </div>
+      <div class="paper-meta-row">
+        <span>👨‍🏫 ${esc(p.faculty_name||'—')}</span>
+        <span>❓ ${p.question_count ?? '—'} questions</span>
+        <span>📊 ${p.total_marks ?? '—'} marks</span>
+        <span>🕒 ${p.duration_mins ?? '—'} min</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">
+        Submitted ${timeAgo(p.submitted_at || p.created_at)}
+      </div>
+      <div class="paper-footer">
+        <span></span>
+        <button class="btn btn-primary btn-sm" onclick="openReview(${p.id})">🔍 Review Paper →</button>
+      </div>
+    </div>`).join('');
+}
+
+// =============================================
+//  HISTORY
+// =============================================
+function renderHistory() {
+  let papers = STATE.allPapers.filter(p => ['approved','rejected'].includes(p.status));
+  if (STATE.historyFilter) papers = papers.filter(p => p.status === STATE.historyFilter);
+
+  document.getElementById('historyLabel').textContent =
+    STATE.historyFilter ? `Showing: ${STATE.historyFilter} papers` : 'All moderated papers';
+
+  const tbody = document.getElementById('historyTable');
+  if (!papers.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted)">No papers found</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = papers.map(p => `
+    <tr>
+      <td><strong>${esc(p.title)}</strong></td>
+      <td>${esc(p.subject_name||'—')}</td>
+      <td>${esc(p.faculty_name||'—')}</td>
+      <td>${statusBadge(p.status)}</td>
+      <td>${p.question_count ?? '—'}</td>
+      <td><button class="btn btn-secondary btn-sm" onclick="openReview(${p.id})">👁 View</button></td>
+    </tr>`).join('');
+}
+
+// =============================================
+//  REVIEW PAPER
+// =============================================
+async function openReview(paperId) {
+  showLoader('Loading paper...');
+  try {
+    const data = await api('GET', `/api/papers/${paperId}`);
+    STATE.currentPaper = data;
+    STATE.currentQuestions = data.questions || [];
+
+    // Mark as under_review if submitted
+    if (data.status === 'submitted') {
+      await api('PATCH', `/api/papers/${paperId}/moderate`, { action: 'review' }).catch(() => {});
+    }
+
+    renderReviewModal(data);
+    openModal('reviewModal');
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+  hideLoader();
+}
+
+function renderReviewModal(paper) {
+  document.getElementById('reviewModalTitle').textContent = paper.title;
+  document.getElementById('reviewModalSubtitle').textContent =
+    `${paper.subject_name || ''} · Faculty: ${paper.faculty_name || '—'}`;
+
+  document.getElementById('reviewPaperInfo').innerHTML = `
+    <div class="info-item"><div class="info-label">Subject</div><div class="info-val">${esc(paper.subject_name||'—')}</div></div>
+    <div class="info-item"><div class="info-label">Faculty</div><div class="info-val">${esc(paper.faculty_name||'—')}</div></div>
+    <div class="info-item"><div class="info-label">Total Marks</div><div class="info-val">${paper.total_marks ?? '—'}</div></div>
+    <div class="info-item"><div class="info-label">Duration</div><div class="info-val">${paper.duration_mins ? paper.duration_mins + ' min' : '—'}</div></div>
+    <div class="info-item"><div class="info-label">Questions</div><div class="info-val">${STATE.currentQuestions.length}</div></div>
+    <div class="info-item"><div class="info-label">Status</div><div class="info-val">${statusBadge(paper.status)}</div></div>`;
+
+  document.getElementById('reviewQCount').textContent = STATE.currentQuestions.length;
+
+  // Render questions
+  const qEl = document.getElementById('reviewQuestions');
+  if (!STATE.currentQuestions.length) {
+    qEl.innerHTML = `<div class="empty"><div class="empty-icon">❓</div><p>No questions in this paper</p></div>`;
+  } else {
+    qEl.innerHTML = STATE.currentQuestions.map((q, i) => {
+      const qType = q.type || q.question_type;
+      const opts = ['a','b','c','d'].map(l => ({ letter: l.toUpperCase(), text: q['option_'+l] })).filter(o => o.text);
+      const correctLetter = (q.correct_option || '').toUpperCase();
+      return `
+        <div class="question-item">
+          <div class="q-header">
+            <div class="q-number">${i+1}</div>
+            <div class="q-text">${esc(q.question_text)}</div>
+          </div>
+          <div class="q-meta">
+            <span class="chip">${qType === 'mcq' ? '📋 MCQ' : '✍️ Essay'}</span>
+            <span class="chip chip-green">📊 ${q.marks} mark${q.marks!=1?'s':''}</span>
+          </div>
+          ${qType === 'mcq' && opts.length ? `
+            <div class="q-options">
+              ${opts.map(o => `
+                <div class="q-opt ${o.letter === correctLetter ? 'correct' : ''}">
+                  <strong>${o.letter}.</strong> ${esc(o.text)}
+                  ${o.letter === correctLetter ? ' ✓ Correct' : ''}
+                </div>`).join('')}
+            </div>` : ''}
+          ${qType === 'essay' && q.explanation ? `
+            <div style="margin-top:8px;padding:8px 12px;background:var(--surface2);border-radius:6px;font-size:12px;color:var(--text-muted)">
+              📝 <strong>Marking guide:</strong> ${esc(q.explanation)}
+            </div>` : ''}
+        </div>`;
+    }).join('');
+  }
+
+  // Show decision box or result
+  const isDecidable = ['submitted','under_review'].includes(paper.status);
+  document.getElementById('decisionBox').style.display = isDecidable ? '' : 'none';
+  document.getElementById('moderatorNote').value = '';
+
+  const decidedEl = document.getElementById('alreadyDecided');
+  if (!isDecidable) {
+    decidedEl.style.display = '';
+    const isApproved = paper.status === 'approved';
+    decidedEl.innerHTML = `
+      <div style="padding:16px;border-radius:10px;background:${isApproved ? 'var(--success-bg)' : 'var(--danger-bg)'};border:1px solid ${isApproved ? '#b2dfcc' : '#f0c0c0'}">
+        <div style="font-weight:700;font-size:13px;color:${isApproved ? 'var(--success)' : 'var(--danger)'};margin-bottom:6px">
+          ${isApproved ? '✅ Paper Approved' : '❌ Paper Rejected'}
+        </div>
+        ${paper.rejection_note ? `<p style="font-size:13px;color:var(--text-muted)">${esc(paper.rejection_note)}</p>` : ''}
+      </div>`;
+  } else {
+    decidedEl.style.display = 'none';
+  }
+}
+
+async function moderate(action) {
+  const note = document.getElementById('moderatorNote').value.trim();
+  if (action === 'reject' && !note) {
+    toast('Please provide feedback explaining why the paper is rejected', 'error');
+    return;
+  }
+
+  const label = action === 'approve' ? 'Approving...' : 'Rejecting...';
+  showLoader(label);
+  try {
+    const data = await api('PATCH', `/api/papers/${STATE.currentPaper.id}/moderate`, {
+      action,
+      note: note || null,
+    });
+
+    // Update in state
+    const idx = STATE.allPapers.findIndex(p => p.id === STATE.currentPaper.id);
+    if (idx !== -1) {
+      STATE.allPapers[idx] = { ...STATE.allPapers[idx], ...data, status: data.status };
+    }
+    STATE.papers = STATE.allPapers.filter(p => ['submitted','under_review'].includes(p.status));
+    STATE.currentPaper = { ...STATE.currentPaper, ...data };
+    updateQueueBadge();
+
+    closeModal('reviewModal');
+    toast(action === 'approve' ? '✅ Paper approved!' : '❌ Paper rejected', action === 'approve' ? 'success' : 'info');
+
+    // Refresh current page
+    const activePage = document.querySelector('.page.active')?.id?.replace('page-', '');
+    if (activePage === 'queue') renderQueue();
+    else if (activePage === 'history') renderHistory();
+    else renderDashboard();
+
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+  hideLoader();
+}
+
+// =============================================
+//  UTILITIES
+// =============================================
+function updateQueueBadge() {
+  const count = STATE.papers.length;
+  const badge = document.getElementById('queueBadge');
+  badge.textContent = count;
+  badge.style.display = count > 0 ? '' : 'none';
+}
+
+function statusBadge(status) {
+  const map = {
+    draft: ['draft','✏️ Draft'],
+    submitted: ['submitted','⏳ Submitted'],
+    under_review: ['review','🔍 Under Review'],
+    approved: ['approved','✅ Approved'],
+    rejected: ['rejected','❌ Rejected'],
+  };
+  const [cls, label] = map[status] || ['draft', status || '—'];
+  return `<span class="badge badge-${cls}">${label}</span>`;
+}
+
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function timeAgo(dateStr) {
+  if (!dateStr) return '—';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff/60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins/60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs/24)}d ago`;
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function showLoader(msg) { document.getElementById('loadingMsg').textContent = msg||'Loading...'; document.getElementById('loadingOverlay').classList.add('show'); }
+function hideLoader() { document.getElementById('loadingOverlay').classList.remove('show'); }
+
+function toast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.innerHTML = `<span>${type==='success'?'✓':type==='error'?'✕':'ℹ'}</span> ${esc(msg)}`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+function logout() {
+  localStorage.removeItem('pg_token');
+  localStorage.removeItem('pg_user');
+  window.location.href = '/';
+}
+
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
+});
+</script>
+</body>
+</html>
