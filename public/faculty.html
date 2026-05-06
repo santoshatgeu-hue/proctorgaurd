@@ -1565,7 +1565,7 @@ async function saveQuestion() {
     const correctIdx = parseInt(correctEl.value);
     const letters = ['a','b','c','d'];
     opts.forEach((opt, i) => { qData['option_' + letters[i]] = opt; });
-    qData.correct_option = letters[correctIdx];
+    qData.correct_option = letters[correctIdx].toUpperCase();
   } else {
     qData.explanation = document.getElementById('qAnswerKey').value.trim() || null;
   }
