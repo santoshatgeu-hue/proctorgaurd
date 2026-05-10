@@ -248,6 +248,31 @@ app.post('/api/subjects', auth(['admin']), async (req, res) => {
     res.status(201).json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+app.post('/api/subjects/bulk', auth(['admin']), upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  try {
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = wb.SheetNames.find(n => n.toLowerCase() === 'subjects') || wb.SheetNames[0];
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+    const created = [], updated = [], errors = [];
+    for (const row of rows) {
+      const code = String(row['code'] || '').trim().toUpperCase();
+      const name = String(row['name'] || '').trim();
+      const dept = String(row['department'] || '').trim() || null;
+      if (!code || !name) { errors.push(`Missing code or name in row`); continue; }
+      try {
+        const { rows: r } = await pool.query(
+          `INSERT INTO subjects (code, name, department) VALUES ($1,$2,$3)
+           ON CONFLICT (code) DO UPDATE SET name=$2, department=$3
+           RETURNING *, (xmax=0) AS is_new`,
+          [code, name, dept]
+        );
+        r[0].is_new ? created.push(r[0]) : updated.push(r[0]);
+      } catch (err) { errors.push(`${code}: ${err.message}`); }
+    }
+    res.json({ success: true, summary: { created: created.length, updated: updated.length, errors: errors.length }, created, updated, errors });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // ══════════════════════════════════════════════════════════════
 // QUESTION PAPERS (Faculty)
