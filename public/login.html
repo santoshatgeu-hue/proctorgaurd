@@ -88,7 +88,14 @@ const stored = localStorage.getItem('pg_token');
 if (stored) {
   try {
     const u = JSON.parse(atob(stored.split('.')[1]));
-    if (u.exp * 1000 > Date.now()) window.location.href = ROLE_ROUTES[u.role] || '/';
+    if (u.exp * 1000 > Date.now()) {
+      const roles = u.roles || [u.role];
+      const dest = roles.includes('admin') ? '/admin'
+                 : roles.includes('student') ? '/student'
+                 : roles.some(r => ['faculty','moderator','proctor'].includes(r)) ? '/portal'
+                 : '/';
+      window.location.href = dest;
+    }
   } catch {}
 }
 
@@ -128,7 +135,12 @@ async function login() {
     if (data.user.must_change_password) {
       window.location.href = '/change-password.html'; return;
     }
-    window.location.href = ROLE_ROUTES[data.user.role] || '/';
+    const roles = data.user.roles || [data.user.role];
+    const dest = roles.includes('admin') ? '/admin'
+               : roles.includes('student') ? '/student'
+               : roles.some(r => ['faculty','moderator','proctor'].includes(r)) ? '/portal'
+               : '/';
+    window.location.href = dest;
   } catch (e) {
     errEl.textContent = 'Server error. Please try again.';
     errEl.style.display = 'block';
