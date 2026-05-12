@@ -124,7 +124,7 @@ app.post('/api/admin/bulk-upload', auth(['admin']), upload.single('file'), async
     const results = { students: [], faculty: [], moderators: [], proctors: [], errors: [] };
 
     for (const sheetName of wb.SheetNames) {
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '', range: 1 });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '', range: 3 });
       const role = sheetName.toLowerCase().replace(/s$/, ''); // students→student etc
 
       if (!['student','faculty','moderator','proctor'].includes(role)) continue;
@@ -253,7 +253,7 @@ app.post('/api/subjects/bulk', auth(['admin']), upload.single('file'), async (re
   try {
     const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
     const sheetName = wb.SheetNames.find(n => n.toLowerCase() === 'subjects') || wb.SheetNames[0];
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '', range: 1 });
     const created = [], updated = [], errors = [];
     for (const row of rows) {
       const code = String(row['code'] || '').trim().toUpperCase();
