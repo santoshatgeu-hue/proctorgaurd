@@ -124,7 +124,7 @@ app.post('/api/admin/bulk-upload', auth(['admin']), upload.single('file'), async
     const results = { students: [], faculty: [], moderators: [], proctors: [], errors: [] };
 
     for (const sheetName of wb.SheetNames) {
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '', range: 1 });
       const role = sheetName.toLowerCase().replace(/s$/, ''); // students→student etc
 
       if (!['student','faculty','moderator','proctor'].includes(role)) continue;
