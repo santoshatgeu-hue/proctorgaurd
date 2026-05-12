@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProctorGuard — Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" rel="stylesheet">
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f4f0; --surface: #fff; --surface2: #f0ede6; --border: #e2ddd5;
+    --accent: #1a3a5c; --accent2: #2e6da4; --gold: #c8922a;
+    --text: #1c1c1c; --text-muted: #6b6560;
+    --success: #1e6b4a; --success-bg: #e6f4ed;
+    --warning: #8a5c00; --warning-bg: #fff5e0;
+    --danger: #8b1a1a; --danger-bg: #fdeaea;
+    --info: #1a4a7a; --info-bg: #e6f0fb;
+    --radius: 10px; --shadow: 0 2px 12px rgba(0,0,0,0.07); --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+
+  /* TOPBAR */
+  .topbar { background: var(--accent); color: white; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 58px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+  .topbar-brand { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 34px; height: 34px; background: var(--gold); border-radius: 8px; display: grid; place-items: center; font-size: 18px; }
+  .topbar-brand h1 { font-family: 'DM Serif Display', serif; font-size: 18px; font-weight: 400; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 32px; height: 32px; background: var(--gold); border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+  .btn-logout { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: inherit; }
+  .btn-logout:hover { background: rgba(255,255,255,0.22); }
+
+  /* ROLE TAB BAR */
+  .role-tabbar { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 24px; gap: 4px; height: 50px; position: sticky; top: 58px; z-index: 90; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+  .role-tab { display: flex; align-items: center; gap: 7px; padding: 8px 18px; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 13.5px; font-weight: 500; color: var(--text-muted); border: none; background: none; font-family: inherit; transition: all 0.15s; border-bottom: 3px solid transparent; margin-bottom: -1px; }
+  .role-tab:hover { color: var(--text); background: var(--surface2); }
+  .role-tab.active { color: var(--accent2); font-weight: 600; border-bottom-color: var(--accent2); background: var(--info-bg); }
+  .role-tab .tab-icon { font-size: 16px; }
+  .role-tab .tab-badge { background: var(--gold); color: white; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; }
+
+  /* LAYOUT */
+  .layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 108px); }
+
+  /* SIDEBAR */
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; position: sticky; top: 108px; height: calc(100vh - 108px); overflow-y: auto; }
+  .sidebar-section { padding: 0 14px 16px; }
+  .sidebar-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); padding: 0 8px 8px; }
+  .nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-radius: 7px; cursor: pointer; transition: all 0.15s; color: var(--text-muted); font-size: 13px; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: #e8f0f9; color: var(--accent2); font-weight: 600; }
+  .nav-item .icon { font-size: 15px; width: 20px; text-align: center; }
+  .nav-badge { margin-left: auto; background: var(--gold); color: white; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; }
+  .sidebar-divider { height: 1px; background: var(--border); margin: 4px 14px 14px; }
+
+  /* MAIN */
+  .main { padding: 24px 28px; overflow-y: auto; }
+  .role-view { display: none; }
+  .role-view.active { display: block; }
+  .page { display: none; }
+  .page.active { display: block; animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; } }
+
+  /* PAGE ELEMENTS */
+  .page-header { margin-bottom: 20px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .page-title { font-family: 'DM Serif Display', serif; font-size: 24px; font-weight: 400; color: var(--accent); }
+  .page-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+
+  /* CARDS */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-weight: 600; font-size: 14px; color: var(--accent); }
+  .card-body { padding: 18px; }
+
+  /* STATS */
+  .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; display: flex; align-items: center; gap: 12px; }
+  .stat-icon { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-size: 20px; flex-shrink: 0; }
+  .stat-val { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .stat-lbl { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+  /* BUTTONS */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 7px; font-size: 13px; font-family: inherit; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; white-space: nowrap; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #122a45; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-success { background: var(--success); color: white; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-gold { background: var(--gold); color: white; }
+  .btn-sm { padding: 5px 11px; font-size: 12px; }
+  .btn-icon { padding: 6px; border-radius: 6px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* BADGES */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .badge-draft { background: var(--surface2); color: var(--text-muted); }
+  .badge-submitted { background: var(--warning-bg); color: var(--warning); }
+  .badge-review { background: var(--info-bg); color: var(--info); }
+  .badge-approved { background: var(--success-bg); color: var(--success); }
+  .badge-rejected { background: var(--danger-bg); color: var(--danger); }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); padding: 10px 14px; background: var(--surface2); border-bottom: 1px solid var(--border); }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody td { padding: 11px 14px; font-size: 13px; vertical-align: middle; }
+
+  /* PAPER CARDS */
+  .papers-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(310px,1fr)); gap: 14px; }
+  .paper-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; transition: box-shadow 0.15s; position: relative; overflow: hidden; }
+  .paper-card::before { content:''; position:absolute; top:0;left:0;right:0; height:3px; }
+  .paper-card.status-draft::before { background:var(--text-muted); }
+  .paper-card.status-submitted::before { background:var(--gold); }
+  .paper-card.status-under_review::before { background:var(--accent2); }
+  .paper-card.status-approved::before { background:var(--success); }
+  .paper-card.status-rejected::before { background:var(--danger); }
+  .paper-card:hover { box-shadow: var(--shadow-lg); }
+  .paper-card-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px; gap:8px; }
+  .paper-title { font-size:14px; font-weight:600; }
+  .paper-meta-row { font-size:12px; color:var(--text-muted); display:flex; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+  .paper-footer { padding-top:12px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+
+  /* SUBJECTS GRID */
+  .subjects-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(240px,1fr)); gap: 14px; }
+  .subject-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden; }
+  .subject-card::before { content:''; position:absolute; top:0;left:0;right:0;height:3px; background:var(--accent2); }
+  .subject-card:hover { border-color:var(--accent2); box-shadow:var(--shadow-lg); transform:translateY(-2px); }
+  .subject-code { font-size:11px; font-weight:600; color:var(--accent2); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:3px; }
+  .subject-name { font-size:14px; font-weight:600; margin-bottom:6px; }
+  .subject-papers { margin-top:12px; padding-top:12px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+
+  /* QUESTION LIST */
+  .question-list { display:flex; flex-direction:column; gap:10px; }
+  .question-item { background:var(--surface); border:1.5px solid var(--border); border-radius:var(--radius); padding:14px 16px; }
+  .question-item:hover { border-color:var(--accent2); }
+  .q-header { display:flex; align-items:flex-start; gap:10px; margin-bottom:7px; }
+  .q-number { width:24px;height:24px;background:var(--accent);color:white;border-radius:50%;font-size:10px;font-weight:700;display:grid;place-items:center;flex-shrink:0; }
+  .q-text { font-size:13.5px;font-weight:500;flex:1;line-height:1.5; }
+  .q-actions { display:flex;gap:5px; }
+  .q-meta { display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px; }
+  .q-options { margin-top:8px;display:grid;gap:4px; }
+  .q-opt { font-size:12.5px;padding:5px 10px;border-radius:5px;background:var(--surface2);color:var(--text-muted);display:flex;align-items:center;gap:6px; }
+  .q-opt.correct { background:var(--success-bg);color:var(--success);font-weight:600; }
+
+  /* CHIPS */
+  .chip { display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:var(--surface2);color:var(--text-muted); }
+  .chip-blue { background:var(--info-bg);color:var(--info); }
+  .chip-green { background:var(--success-bg);color:var(--success); }
+
+  /* MODAL */
+  .modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:200;display:none;place-items:center;padding:20px;backdrop-filter:blur(2px); }
+  .modal-overlay.open { display:grid; }
+  .modal { background:var(--surface);border-radius:14px;box-shadow:var(--shadow-lg);width:100%;max-width:680px;max-height:92vh;overflow-y:auto;animation:modalIn 0.2s ease; }
+  .modal-lg { max-width:820px; }
+  .modal-sm { max-width:460px; }
+  @keyframes modalIn { from{opacity:0;transform:scale(0.96) translateY(8px);}to{opacity:1;transform:scale(1) translateY(0);} }
+  .modal-header { padding:18px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between; }
+  .modal-title { font-family:'DM Serif Display',serif;font-size:18px;color:var(--accent); }
+  .modal-body { padding:20px 22px; }
+  .modal-footer { padding:14px 22px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:flex-end;gap:10px; }
+  .close-btn { background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);padding:2px 4px;border-radius:4px; }
+  .close-btn:hover { color:var(--text);background:var(--surface2); }
+
+  /* FORM */
+  .form-group { margin-bottom:14px; }
+  .form-row { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+  label { display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px; }
+  input,select,textarea { width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13.5px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;transition:border-color 0.15s; }
+  input:focus,select:focus,textarea:focus { border-color:var(--accent2); }
+  textarea { resize:vertical;min-height:80px; }
+  .radio-group { display:flex;gap:16px;flex-wrap:wrap; }
+  .radio-label { display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text);text-transform:none;letter-spacing:0;font-weight:500; }
+
+  /* MCQ options */
+  .options-grid { display:grid;gap:8px; }
+  .option-row { display:flex;align-items:flex-start;gap:8px; }
+  .option-letter { width:28px;height:28px;background:var(--surface2);border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--text-muted);flex-shrink:0;margin-top:8px; }
+  .option-correct { margin-top:10px; }
+
+  /* Quill */
+  .ql-toolbar.ql-snow { border:1.5px solid var(--border);border-radius:7px 7px 0 0;background:var(--surface2);padding:5px 8px; }
+  .ql-container.ql-snow { border:1.5px solid var(--border);border-top:none;border-radius:0 0 7px 7px;font-family:inherit;font-size:13.5px;min-height:70px;background:var(--surface); }
+  .ql-editor { min-height:70px;padding:9px 12px; }
+  .ql-editor.ql-blank::before { color:var(--text-muted);font-style:italic; }
+  .opt-editor-wrap { flex:1; }
+  .opt-editor-wrap .ql-toolbar.ql-snow { padding:3px 6px; }
+  .opt-editor-wrap .ql-container.ql-snow { min-height:34px; }
+  .opt-editor-wrap .ql-editor { min-height:34px;padding:6px 10px; }
+
+  /* Symbol bar */
+  .sym-bar { display:flex;flex-wrap:wrap;gap:3px;margin-top:5px;padding:5px 8px;background:var(--surface2);border:1.5px solid var(--border);border-top:none;border-radius:0 0 7px 7px; }
+  .sym-btn { padding:2px 7px;border-radius:4px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-size:13px;color:var(--text);font-family:'Times New Roman',serif; }
+  .sym-btn:hover { background:var(--accent2);color:white;border-color:var(--accent2); }
+
+  /* Rejection box */
+  .rejection-box { background:var(--danger-bg);border:1px solid #f0c0c0;border-radius:8px;padding:10px 14px;margin-top:10px; }
+  .rej-label { font-size:11px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px; }
+
+  /* Decision box */
+  .decision-box { background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-top:18px; }
+  .decision-box h3 { font-size:14px;font-weight:600;margin-bottom:12px;color:var(--accent); }
+  .decision-btns { display:flex;gap:10px;margin-top:12px;flex-wrap:wrap; }
+
+  /* Paper info grid */
+  .paper-info-grid { display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px; }
+  .info-item { background:var(--surface2);padding:10px 14px;border-radius:8px; }
+  .info-label { font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:2px; }
+  .info-val { font-size:14px;font-weight:600;color:var(--accent); }
+
+  /* Empty */
+  .empty { text-align:center;padding:40px 20px;color:var(--text-muted); }
+  .empty-icon { font-size:36px;margin-bottom:10px;opacity:0.5; }
+  .empty h3 { font-size:15px;font-weight:600;color:var(--text);margin-bottom:5px; }
+
+  /* Toast */
+  #toast-container { position:fixed;bottom:20px;right:20px;z-index:999;display:flex;flex-direction:column;gap:7px; }
+  .toast { padding:11px 16px;border-radius:9px;font-size:13px;font-weight:500;box-shadow:var(--shadow-lg);display:flex;align-items:center;gap:8px;animation:toastIn 0.25s ease;min-width:240px; }
+  @keyframes toastIn { from{opacity:0;transform:translateX(20px);}to{opacity:1;} }
+  .toast-success { background:var(--success);color:white; }
+  .toast-error { background:var(--danger);color:white; }
+  .toast-info { background:var(--accent2);color:white; }
+
+  /* Loader */
+  .loading-overlay { position:fixed;inset:0;background:rgba(255,255,255,0.7);z-index:500;display:none;place-items:center; }
+  .loading-overlay.show { display:grid; }
+  .big-spinner { width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent2);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 10px; }
+  @keyframes spin { to{transform:rotate(360deg);} }
+
+  .section-sep { height:1px;background:var(--border);margin:14px 0; }
+  .breadcrumb { display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);margin-bottom:10px; }
+  .breadcrumb a { color:var(--accent2);cursor:pointer; }
+  .flex { display:flex;align-items:center;gap:8px; }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <div class="logo-icon">🎓</div>
+    <h1>ProctorGuard</h1>
+  </div>
+  <div class="topbar-right">
+    <div class="flex">
+      <div class="avatar" id="userAvatar">U</div>
+      <span style="font-size:13px" id="userNameDisplay">User</span>
+    </div>
+    <button class="btn-logout" onclick="logout()">Sign Out</button>
+  </div>
+</div>
+
+<!-- ROLE TAB BAR -->
+<div class="role-tabbar" id="roleTabBar"></div>
+
+<div class="layout">
+
+  <!-- SIDEBAR — changes based on active role -->
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main" id="mainContent"></main>
+
+</div>
+
+<!-- ═══ MODALS ═══ -->
+
+<!-- Add/Edit Question -->
+<div class="modal-overlay" id="questionModal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title" id="qModalTitle">Add Question</div>
+      <button class="close-btn" onclick="closeModal('questionModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Question Type</label>
+        <div class="radio-group">
+          <label class="radio-label"><input type="radio" name="qType" value="mcq" checked onchange="onQTypeChange()"> MCQ</label>
+          <label class="radio-label"><input type="radio" name="qType" value="essay" onchange="onQTypeChange()"> Essay</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Question Text *</label>
+        <div id="qTextEditor"></div>
+        <div class="sym-bar">
+          <span style="font-size:10px;color:var(--text-muted);align-self:center;margin-right:4px">Insert:</span>
+          ${['±','×','÷','≠','≤','≥','∞','√','∑','∫','∂','π','θ','α','β','γ','Δ','→','∈','∩','∪','°'].map(s=>`<button class="sym-btn" onclick="insertSym('q','${s}')">${s}</button>`).join('')}
+          <button class="sym-btn" onclick="openEqDialog('q')" style="background:var(--accent);color:white;border-color:var(--accent);font-family:inherit;font-size:11px;padding:2px 9px;">∫ Eq</button>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Marks *</label><input type="number" id="qMarks" placeholder="e.g. 5" min="1"></div>
+        <div class="form-group"><label>Section / Part</label><input type="text" id="qSection" placeholder="Optional"></div>
+      </div>
+      <div id="mcqSection">
+        <div class="section-sep"></div>
+        <label style="margin-bottom:10px;display:block">Options — mark the correct one ✓</label>
+        <div class="options-grid">
+          ${[0,1,2,3].map(i=>`
+          <div class="option-row">
+            <div class="option-letter" style="margin-top:8px">${String.fromCharCode(65+i)}</div>
+            <div class="opt-editor-wrap"><div id="optEditor${i}"></div></div>
+            <label class="radio-label option-correct" title="Correct answer"><input type="radio" name="correctOpt" value="${i}"> ✓</label>
+          </div>`).join('')}
+        </div>
+        <div class="sym-bar" style="margin-top:6px;border-radius:7px">
+          <span style="font-size:10px;color:var(--text-muted);align-self:center;margin-right:4px">Option symbols:</span>
+          ${['±','×','÷','≤','≥','√','π','θ','α','°'].map(s=>`<button class="sym-btn" onclick="insertSymOpt('${s}')">${s}</button>`).join('')}
+          <button class="sym-btn" onclick="openEqDialog(null)" style="background:var(--accent);color:white;border-color:var(--accent);font-family:inherit;font-size:11px;padding:2px 9px;">∫ Eq</button>
+        </div>
+      </div>
+      <div id="essaySection" style="display:none">
+        <p style="font-size:12px;color:var(--text-muted);padding:10px;background:var(--surface2);border-radius:6px;margin-top:8px">✍️ Students will type their essay answer during the exam.</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('questionModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveQuestion()">Save Question</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Paper -->
+<div class="modal-overlay" id="newPaperModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">Create New Paper</div><button class="close-btn" onclick="closeModal('newPaperModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>Subject *</label><select id="newPaperSubject"><option value="">Select subject...</option></select></div>
+      <div class="form-group"><label>Paper Title *</label><input type="text" id="newPaperTitle" placeholder="e.g. Mid-Term Exam 2025"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('newPaperModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="createNewPaper()">Create →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Submit Confirmation -->
+<div class="modal-overlay" id="submitModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">Submit for Moderation?</div><button class="close-btn" onclick="closeModal('submitModal')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-muted);line-height:1.7">Once submitted you cannot edit questions unless rejected by a moderator.</p>
+      <div id="submitSummary" style="margin-top:12px;padding:12px;background:var(--surface2);border-radius:8px;font-size:13px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('submitModal')">Go Back</button>
+      <button class="btn btn-gold" onclick="submitPaper()">🚀 Confirm Submit</button>
+    </div>
+  </div>
+</div>
+
+<!-- View / Review Paper -->
+<div class="modal-overlay" id="viewPaperModal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div><div class="modal-title" id="viewPaperTitle">Paper</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="viewPaperSub"></div></div>
+      <button class="close-btn" onclick="closeModal('viewPaperModal')">✕</button>
+    </div>
+    <div class="modal-body" id="viewPaperBody"></div>
+    <div class="modal-footer" id="viewPaperFooter"></div>
+  </div>
+</div>
+
+<!-- Equation Dialog -->
+<div class="modal-overlay" id="eqModal">
+  <div class="modal modal-sm">
+    <div class="modal-header"><div class="modal-title">Insert Equation</div><button class="close-btn" onclick="closeModal('eqModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>LaTeX Expression</label><input type="text" id="eqInput" placeholder="\frac{a}{b}, x^2, \int_0^1 x\,dx" style="font-family:monospace" oninput="previewEq()"></div>
+      <div style="min-height:40px;padding:10px;background:var(--surface2);border-radius:6px;text-align:center;font-size:18px" id="eqPreview"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:10px">
+        ${[[`\\frac{a}{b}`,'a/b'],[`x^{2}+y^{2}`,'x²+y²'],[`\\sqrt{x}`,'√x'],[`\\int_0^\\infty`,'∫'],[`\\sum_{n=1}^{N}`,'∑'],[`\\lim_{x\\to 0}`,'lim'],[`\\vec{F}=m\\vec{a}`,'F=ma'],[`\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}`,'Matrix']].map(([l,n])=>`<button class="sym-btn" onclick="setEqEx('${l.replace(/\\/g,'\\\\')}')">${n}</button>`).join('')}
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('eqModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmEq()">Insert</button>
+    </div>
+  </div>
+</div>
+
+<div class="loading-overlay" id="loadingOverlay"><div><div class="big-spinner"></div><div style="font-size:13px;color:var(--text-muted)" id="loadingMsg">Loading...</div></div></div>
+<div id="toast-container"></div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════
+const STATE = {
+  user: null, token: null,
+  roles: [],        // e.g. ['faculty','moderator']
+  activeRole: null, // currently selected tab
+  subjects: [],
+  papers: [],
+  questions: [],
+  currentPaper: null,
+  editingQIndex: null,
+};
+
+const ROLE_CONFIG = {
+  faculty:   { icon: '👨‍🏫', label: 'Faculty',   color: '#2e6da4' },
+  moderator: { icon: '🔍', label: 'Moderator', color: '#8a5c00' },
+  proctor:   { icon: '🛡',  label: 'Proctor',   color: '#1e6b4a' },
+};
+
+// ═══════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+  const token = localStorage.getItem('pg_token');
+  const user  = JSON.parse(localStorage.getItem('pg_user') || 'null');
+  if (!token || !user) { window.location.href = '/'; return; }
+
+  STATE.token = token;
+  STATE.user  = user;
+  STATE.roles = user.roles || (user.role ? [user.role] : []);
+
+  // Filter to portal roles only
+  STATE.roles = STATE.roles.filter(r => ['faculty','moderator','proctor'].includes(r));
+  if (!STATE.roles.length) { window.location.href = '/'; return; }
+
+  document.getElementById('userNameDisplay').textContent = user.name || user.email;
+  document.getElementById('userAvatar').textContent = (user.name||user.email||'U')[0].toUpperCase();
+
+  renderRoleTabs();
+  switchRole(STATE.roles[0]);
+  initQuillEditors();
+});
+
+// ═══════════════════════════════════════════════════
+//  ROLE TABS
+// ═══════════════════════════════════════════════════
+function renderRoleTabs() {
+  const bar = document.getElementById('roleTabBar');
+  bar.innerHTML = STATE.roles.map(r => {
+    const cfg = ROLE_CONFIG[r];
+    return `<button class="role-tab" id="tab-${r}" onclick="switchRole('${r}')">
+      <span class="tab-icon">${cfg.icon}</span> ${cfg.label}
+    </button>`;
+  }).join('');
+}
+
+function switchRole(role) {
+  STATE.activeRole = role;
+  document.querySelectorAll('.role-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + role)?.classList.add('active');
+  renderSidebar(role);
+  loadRoleData(role).then(() => showRolePage(role, 'dashboard'));
+}
+
+// ═══════════════════════════════════════════════════
+//  SIDEBAR & PAGES PER ROLE
+// ═══════════════════════════════════════════════════
+const SIDEBARS = {
+  faculty: `
+    <div class="sidebar-section">
+      <div class="sidebar-label">Faculty</div>
+      <button class="nav-item active" onclick="showRolePage('faculty','dashboard')" id="fnav-dashboard"><span class="icon">🏠</span>Dashboard</button>
+      <button class="nav-item" onclick="showRolePage('faculty','subjects')" id="fnav-subjects"><span class="icon">📚</span>My Subjects</button>
+      <button class="nav-item" onclick="showRolePage('faculty','papers')" id="fnav-papers"><span class="icon">📄</span>Question Papers<span class="nav-badge" id="fPendingBadge" style="display:none">0</span></button>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Status</div>
+      <button class="nav-item" onclick="filterFPapers('draft')"><span class="icon">✏️</span>Drafts</button>
+      <button class="nav-item" onclick="filterFPapers('submitted')"><span class="icon">⏳</span>Pending Review</button>
+      <button class="nav-item" onclick="filterFPapers('approved')"><span class="icon">✅</span>Approved</button>
+      <button class="nav-item" onclick="filterFPapers('rejected')"><span class="icon">❌</span>Rejected</button>
+    </div>`,
+  moderator: `
+    <div class="sidebar-section">
+      <div class="sidebar-label">Moderator</div>
+      <button class="nav-item active" onclick="showRolePage('moderator','dashboard')" id="mnav-dashboard"><span class="icon">🏠</span>Dashboard</button>
+      <button class="nav-item" onclick="showRolePage('moderator','queue')" id="mnav-queue"><span class="icon">📋</span>Review Queue<span class="nav-badge" id="mQueueBadge" style="display:none">0</span></button>
+      <button class="nav-item" onclick="showRolePage('moderator','history')" id="mnav-history"><span class="icon">📁</span>History</button>
+    </div>`,
+  proctor: `
+    <div class="sidebar-section">
+      <div class="sidebar-label">Proctor</div>
+      <button class="nav-item active" onclick="showRolePage('proctor','dashboard')" id="pnav-dashboard"><span class="icon">🏠</span>Dashboard</button>
+      <button class="nav-item" onclick="showRolePage('proctor','rooms')" id="pnav-rooms"><span class="icon">🏫</span>My Rooms</button>
+    </div>`,
+};
+
+function renderSidebar(role) {
+  document.getElementById('sidebar').innerHTML = SIDEBARS[role] || '';
+}
+
+function showRolePage(role, pageId) {
+  const main = document.getElementById('mainContent');
+  // Render the correct page HTML
+  if (role === 'faculty') renderFacultyPage(pageId);
+  else if (role === 'moderator') renderModeratorPage(pageId);
+  else if (role === 'proctor') renderProctorPage(pageId);
+
+  // Update nav active state
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const navEl = document.getElementById(`${role[0]}nav-${pageId}`);
+  if (navEl) navEl.classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════
+//  LOAD DATA
+// ═══════════════════════════════════════════════════
+async function loadRoleData(role) {
+  showLoader('Loading...');
+  try {
+    await Promise.all([loadSubjects(), loadPapers(role)]);
+  } catch(e) { toast('Failed to load data', 'error'); }
+  hideLoader();
+}
+
+async function loadSubjects() {
+  try {
+    const data = await api('GET', '/api/subjects');
+    STATE.subjects = Array.isArray(data) ? data : [];
+  } catch(e) { STATE.subjects = []; }
+}
+
+async function loadPapers(role) {
+  try {
+    const data = await api('GET', `/api/papers?role=${role}`);
+    STATE.papers = Array.isArray(data) ? data : [];
+  } catch(e) { STATE.papers = []; }
+  updateBadges();
+}
+
+async function loadQuestionsForPaper(paperId) {
+  try {
+    const data = await api('GET', `/api/papers/${paperId}`);
+    STATE.questions = data?.questions || [];
+  } catch(e) { STATE.questions = []; }
+}
+
+function updateBadges() {
+  const pending = STATE.papers.filter(p => ['submitted','under_review'].includes(p.status)).length;
+  const fBadge = document.getElementById('fPendingBadge');
+  const mBadge = document.getElementById('mQueueBadge');
+  if (fBadge) { fBadge.textContent = pending; fBadge.style.display = pending > 0 ? '' : 'none'; }
+  if (mBadge) { mBadge.textContent = pending; mBadge.style.display = pending > 0 ? '' : 'none'; }
+}
+
+// ═══════════════════════════════════════════════════
+//  FACULTY PAGES
+// ═══════════════════════════════════════════════════
+let fFilter = '';
+
+function renderFacultyPage(pageId) {
+  const main = document.getElementById('mainContent');
+  if (pageId === 'dashboard') {
+    const papers = STATE.papers;
+    const pending = papers.filter(p => ['submitted','under_review'].includes(p.status)).length;
+    const approved = papers.filter(p => p.status === 'approved').length;
+    main.innerHTML = `
+      <div class="page-header">
+        <div><div class="page-title">Faculty Dashboard</div><div class="page-subtitle">Welcome, ${esc(STATE.user.name||'')}</div></div>
+        <button class="btn btn-primary" onclick="showRolePage('faculty','subjects')">＋ New Paper</button>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-icon" style="background:#e8f0f9">📚</div><div><div class="stat-val">${STATE.subjects.length}</div><div class="stat-lbl">Subjects</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:#f5e6cc">📄</div><div><div class="stat-val">${papers.length}</div><div class="stat-lbl">Papers</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:#e6f0fb">⏳</div><div><div class="stat-val">${pending}</div><div class="stat-lbl">Under Review</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:#e6f4ed">✅</div><div><div class="stat-val">${approved}</div><div class="stat-lbl">Approved</div></div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Recent Papers</span></div>
+          ${papers.length ? `<table><thead><tr><th>Title</th><th>Status</th><th>Qs</th></tr></thead><tbody>
+            ${papers.slice(0,5).map(p=>`<tr style="cursor:pointer" onclick="openFPaperView(${p.id})">
+              <td><strong>${esc(p.title)}</strong><div style="font-size:11px;color:var(--text-muted)">${esc(p.subject_name||'')}</div></td>
+              <td>${statusBadge(p.status)}</td><td>${p.question_count??'—'}</td></tr>`).join('')}
+          </tbody></table>` : `<div class="empty"><div class="empty-icon">📄</div><p>No papers yet</p></div>`}
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">My Subjects</span></div>
+          ${STATE.subjects.length ? `<table><thead><tr><th>Subject</th><th>Code</th></tr></thead><tbody>
+            ${STATE.subjects.map(s=>`<tr><td><strong>${esc(s.name)}</strong></td><td><span class="chip chip-blue">${esc(s.code||'')}</span></td></tr>`).join('')}
+          </tbody></table>` : `<div class="empty"><div class="empty-icon">📚</div><p>No subjects</p></div>`}
+        </div>
+      </div>`;
+  }
+  else if (pageId === 'subjects') {
+    main.innerHTML = `
+      <div class="page-header"><div><div class="page-title">My Subjects</div><div class="page-subtitle">Click a subject to create a paper</div></div></div>
+      <div class="subjects-grid">
+        ${STATE.subjects.length ? STATE.subjects.map(s => {
+          const cnt = STATE.papers.filter(p=>p.subject_id===s.id).length;
+          return `<div class="subject-card" onclick="openNewPaperModal(${s.id})">
+            <div class="subject-code">${esc(s.code||'')}</div>
+            <div class="subject-name">${esc(s.name)}</div>
+            <div style="font-size:12px;color:var(--text-muted)">${esc(s.department||'')}</div>
+            <div class="subject-papers"><span>${cnt} paper${cnt!==1?'s':''}</span>
+              <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openNewPaperModal(${s.id})">＋ New Paper</button>
+            </div></div>`;
+        }).join('') : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">📚</div><h3>No subjects assigned</h3><p>Contact admin</p></div>`}
+      </div>`;
+  }
+  else if (pageId === 'papers') {
+    let papers = STATE.papers;
+    if (fFilter) papers = papers.filter(p => fFilter === 'submitted' ? ['submitted','under_review'].includes(p.status) : p.status === fFilter);
+    main.innerHTML = `
+      <div class="page-header">
+        <div><div class="page-title">Question Papers</div></div>
+        <div class="flex">
+          <select onchange="fFilter=this.value;renderFacultyPage('papers')" style="width:150px">
+            <option value="">All Papers</option>
+            <option value="draft" ${fFilter==='draft'?'selected':''}>Draft</option>
+            <option value="submitted" ${fFilter==='submitted'?'selected':''}>Pending Review</option>
+            <option value="approved" ${fFilter==='approved'?'selected':''}>Approved</option>
+            <option value="rejected" ${fFilter==='rejected'?'selected':''}>Rejected</option>
+          </select>
+          <button class="btn btn-primary" onclick="showRolePage('faculty','subjects')">＋ New Paper</button>
+        </div>
+      </div>
+      <div class="papers-grid">
+        ${papers.length ? papers.map(p=>`
+          <div class="paper-card status-${p.status}">
+            <div class="paper-card-header"><div><div class="paper-title">${esc(p.title)}</div><div style="font-size:12px;color:var(--text-muted)">${esc(p.subject_name||'')}</div></div>${statusBadge(p.status)}</div>
+            <div class="paper-meta-row"><span>❓ ${p.question_count??0}</span><span>📊 ${p.total_marks??'—'}</span><span>🕒 ${p.duration_mins??'—'} min</span></div>
+            ${p.status==='rejected'&&p.rejection_note?`<div class="rejection-box"><div class="rej-label">💬 Feedback</div><p>${esc(p.rejection_note)}</p></div>`:''}
+            <div class="paper-footer"><span style="font-size:11px;color:var(--text-muted)">${timeAgo(p.updated_at||p.created_at)}</span>
+              <div class="flex">
+                ${canEdit(p)?`<button class="btn btn-secondary btn-sm" onclick="openFEditor(${p.id})">✏️ Edit</button>`:''}
+                <button class="btn btn-secondary btn-sm" onclick="openFPaperView(${p.id})">👁 View</button>
+                ${p.status==='rejected'?`<button class="btn btn-gold btn-sm" onclick="openFEditor(${p.id})">🔄 Resubmit</button>`:''}
+              </div>
+            </div>
+          </div>`).join('') : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">📄</div><h3>No papers</h3></div>`}
+      </div>`;
+  }
+  else if (pageId === 'editor') {
+    const p = STATE.currentPaper;
+    const isEditable = canEdit(p);
+    main.innerHTML = `
+      <div class="breadcrumb"><a onclick="showRolePage('faculty','subjects')">Subjects</a><span>›</span><span>${esc(p.title)}</span></div>
+      <div class="page-header">
+        <div><div class="page-title">${esc(p.title)}</div><div class="page-subtitle">${statusBadge(p.status)} · ${STATE.questions.length} question(s)</div></div>
+        <div class="flex" id="editorActions">
+          ${isEditable?`<button class="btn btn-secondary" onclick="savePaperDraft()">💾 Save Draft</button>
+          <button class="btn btn-gold" onclick="confirmSubmit()">🚀 Submit for Review</button>`:''}
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><span class="card-title">Paper Details</span></div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group"><label>Title *</label><input type="text" id="paperTitle" value="${esc(p.title)}" ${!isEditable?'disabled':''}></div>
+            <div class="form-group"><label>Duration (mins)</label><input type="number" id="paperDuration" value="${p.duration_mins||''}" ${!isEditable?'disabled':''}></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Total Marks</label><input type="number" id="paperTotalMarks" value="${p.total_marks||''}" ${!isEditable?'disabled':''}></div>
+            <div class="form-group"><label>Instructions</label><input type="text" id="paperInstructions" value="${esc(p.instructions||'')}" ${!isEditable?'disabled':''}></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Questions (<span id="qCount">${STATE.questions.length}</span>)</span>
+          ${isEditable?`<button class="btn btn-primary btn-sm" onclick="openAddQuestion()">＋ Add Question</button>`:''}
+        </div>
+        <div class="card-body">
+          <div class="question-list" id="questionList">${renderQList()}</div>
+        </div>
+      </div>`;
+  }
+}
+
+function filterFPapers(status) { fFilter = status; showRolePage('faculty','papers'); }
+
+function canEdit(paper) { return ['draft','rejected'].includes(paper.status); }
+
+// ═══════════════════════════════════════════════════
+//  MODERATOR PAGES
+// ═══════════════════════════════════════════════════
+function renderModeratorPage(pageId) {
+  const main = document.getElementById('mainContent');
+  const all = STATE.papers;
+  const queue = all.filter(p => ['submitted','under_review'].includes(p.status));
+  const history = all.filter(p => ['approved','rejected'].includes(p.status));
+
+  if (pageId === 'dashboard') {
+    main.innerHTML = `
+      <div class="page-header"><div><div class="page-title">Moderator Dashboard</div></div>
+        <button class="btn btn-primary" onclick="showRolePage('moderator','queue')">📋 Review Queue</button></div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-icon" style="background:var(--warning-bg)">⏳</div><div><div class="stat-val">${all.filter(p=>p.status==='submitted').length}</div><div class="stat-lbl">Awaiting Review</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:var(--info-bg)">🔍</div><div><div class="stat-val">${all.filter(p=>p.status==='under_review').length}</div><div class="stat-lbl">Under Review</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:var(--success-bg)">✅</div><div><div class="stat-val">${all.filter(p=>p.status==='approved').length}</div><div class="stat-lbl">Approved</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:var(--danger-bg)">❌</div><div><div class="stat-val">${all.filter(p=>p.status==='rejected').length}</div><div class="stat-lbl">Rejected</div></div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="card"><div class="card-header"><span class="card-title">Queue (${queue.length})</span></div>
+          ${queue.length ? `<table><thead><tr><th>Title</th><th>Faculty</th><th>Status</th></tr></thead><tbody>
+            ${queue.slice(0,5).map(p=>`<tr style="cursor:pointer" onclick="openMReview(${p.id})">
+              <td><strong>${esc(p.title)}</strong><div style="font-size:11px;color:var(--text-muted)">${esc(p.subject_name||'')}</div></td>
+              <td style="font-size:12px">${esc(p.faculty_name||'—')}</td><td>${statusBadge(p.status)}</td></tr>`).join('')}
+          </tbody></table>` : `<div class="empty"><div class="empty-icon">🎉</div><p>All clear!</p></div>`}
+        </div>
+        <div class="card"><div class="card-header"><span class="card-title">Recent Decisions</span></div>
+          ${history.length ? `<table><thead><tr><th>Title</th><th>Status</th></tr></thead><tbody>
+            ${history.slice(0,5).map(p=>`<tr style="cursor:pointer" onclick="openMReview(${p.id})">
+              <td><strong>${esc(p.title)}</strong><div style="font-size:11px;color:var(--text-muted)">${esc(p.faculty_name||'')}</div></td>
+              <td>${statusBadge(p.status)}</td></tr>`).join('')}
+          </tbody></table>` : `<div class="empty"><div class="empty-icon">📁</div><p>No history</p></div>`}
+        </div>
+      </div>`;
+  }
+  else if (pageId === 'queue') {
+    main.innerHTML = `
+      <div class="page-header"><div><div class="page-title">Review Queue</div><div class="page-subtitle">${queue.length} paper${queue.length!==1?'s':''} awaiting review</div></div>
+        <button class="btn btn-secondary" onclick="loadRoleData('moderator').then(()=>renderModeratorPage('queue'))">🔄 Refresh</button></div>
+      <div class="papers-grid">
+        ${queue.length ? queue.map(p=>`
+          <div class="paper-card status-${p.status}">
+            <div class="paper-card-header"><div><div class="paper-title">${esc(p.title)}</div><div style="font-size:12px;color:var(--text-muted)">${esc(p.subject_name||'')}</div></div>${statusBadge(p.status)}</div>
+            <div class="paper-meta-row"><span>👨‍🏫 ${esc(p.faculty_name||'—')}</span><span>❓ ${p.question_count??'—'}</span><span>📊 ${p.total_marks??'—'}</span></div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Submitted ${timeAgo(p.submitted_at||p.created_at)}</div>
+            <div class="paper-footer"><span></span><button class="btn btn-primary btn-sm" onclick="openMReview(${p.id})">🔍 Review →</button></div>
+          </div>`).join('') : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🎉</div><h3>Queue empty!</h3></div>`}
+      </div>`;
+  }
+  else if (pageId === 'history') {
+    main.innerHTML = `
+      <div class="page-header"><div><div class="page-title">Moderation History</div></div></div>
+      <div class="card"><div class="table-wrap"><table>
+        <thead><tr><th>Title</th><th>Subject</th><th>Faculty</th><th>Status</th><th>Qs</th><th></th></tr></thead>
+        <tbody>${history.length ? history.map(p=>`<tr>
+          <td><strong>${esc(p.title)}</strong></td><td>${esc(p.subject_name||'—')}</td>
+          <td>${esc(p.faculty_name||'—')}</td><td>${statusBadge(p.status)}</td>
+          <td>${p.question_count??'—'}</td>
+          <td><button class="btn btn-secondary btn-sm" onclick="openMReview(${p.id})">👁 View</button></td>
+        </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-muted)">No history yet</td></tr>`}
+        </tbody>
+      </table></div></div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  PROCTOR PAGES
+// ═══════════════════════════════════════════════════
+function renderProctorPage(pageId) {
+  const main = document.getElementById('mainContent');
+  main.innerHTML = `
+    <div class="page-header"><div><div class="page-title">Proctor Dashboard</div><div class="page-subtitle">Exam room monitoring</div></div></div>
+    <div class="empty"><div class="empty-icon">🛡</div><h3>Proctor view coming soon</h3><p>Exam room monitoring will appear here when an exam is live.</p></div>`;
+}
+
+// ═══════════════════════════════════════════════════
+//  FACULTY — PAPER ACTIONS
+// ═══════════════════════════════════════════════════
+function openNewPaperModal(subjectId) {
+  const sel = document.getElementById('newPaperSubject');
+  sel.innerHTML = '<option value="">Select subject...</option>' +
+    STATE.subjects.map(s=>`<option value="${s.id}" ${s.id===subjectId?'selected':''}>${esc(s.name)} (${esc(s.code||'')})</option>`).join('');
+  document.getElementById('newPaperTitle').value = '';
+  openModal('newPaperModal');
+}
+
+async function createNewPaper() {
+  const subjectId = document.getElementById('newPaperSubject').value;
+  const title = document.getElementById('newPaperTitle').value.trim();
+  if (!subjectId) { toast('Select a subject','error'); return; }
+  if (!title) { toast('Enter a title','error'); return; }
+  showLoader('Creating...');
+  try {
+    const data = await api('POST', '/api/papers', { subject_id: parseInt(subjectId), title, total_marks:100, duration_mins:90 });
+    const paper = data?.paper || data;
+    STATE.papers.unshift(paper);
+    closeModal('newPaperModal');
+    toast('Paper created!','success');
+    await openFEditor(paper.id);
+  } catch(e) { toast(e.message,'error'); }
+  hideLoader();
+}
+
+async function openFEditor(paperId) {
+  showLoader('Loading...');
+  const paper = STATE.papers.find(p=>p.id===paperId);
+  if (!paper) { hideLoader(); return; }
+  STATE.currentPaper = paper;
+  await loadQuestionsForPaper(paperId);
+  showRolePage('faculty','editor');
+  hideLoader();
+}
+
+function renderQList() {
+  if (!STATE.questions.length) return `<div class="empty"><div class="empty-icon">❓</div><h3>No questions yet</h3><p>Click "Add Question"</p></div>`;
+  const isEditable = canEdit(STATE.currentPaper);
+  return STATE.questions.map((q,i) => {
+    const qType = q.type||q.question_type;
+    const opts = ['a','b','c','d'].map(l=>({l:l.toUpperCase(),t:q['option_'+l]})).filter(o=>o.t);
+    const correct = (q.correct_option||'').toUpperCase();
+    return `<div class="question-item">
+      <div class="q-header">
+        <div class="q-number">${i+1}</div>
+        <div class="q-text">${q.question_text||''}</div>
+        <div class="q-actions">
+          ${isEditable?`<button class="btn btn-secondary btn-sm btn-icon" onclick="editQuestion(${i})">✏️</button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="deleteQuestion(${i})">🗑</button>`:''}
+        </div>
+      </div>
+      <div class="q-meta">
+        <span class="chip">${qType==='mcq'?'📋 MCQ':'✍️ Essay'}</span>
+        <span class="chip chip-green">📊 ${q.marks} mark${q.marks!=1?'s':''}</span>
+      </div>
+      ${qType==='mcq'&&opts.length?`<div class="q-options">${opts.map(o=>`
+        <div class="q-opt ${o.l===correct?'correct':''}"><strong>${o.l}.</strong> <span>${o.t}</span>${o.l===correct?' ✓':''}</div>`).join('')}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+async function savePaperDraft() {
+  const title = document.getElementById('paperTitle')?.value.trim();
+  if (!title) { toast('Title required','error'); return; }
+  showLoader('Saving...');
+  try {
+    const body = { title, duration_mins: parseInt(document.getElementById('paperDuration')?.value)||null, total_marks: parseInt(document.getElementById('paperTotalMarks')?.value)||null, instructions: document.getElementById('paperInstructions')?.value };
+    await api('PATCH', `/api/papers/${STATE.currentPaper.id}`, body);
+    const idx = STATE.papers.findIndex(p=>p.id===STATE.currentPaper.id);
+    if (idx!==-1) STATE.papers[idx] = {...STATE.papers[idx],...body};
+    STATE.currentPaper = {...STATE.currentPaper,...body};
+    toast('Draft saved!','success');
+  } catch(e) { toast(e.message,'error'); }
+  hideLoader();
+}
+
+function confirmSubmit() {
+  if (!STATE.questions.length) { toast('Add questions first','error'); return; }
+  const mcq = STATE.questions.filter(q=>q.type==='mcq').length;
+  const essay = STATE.questions.filter(q=>q.type!=='mcq').length;
+  const marks = STATE.questions.reduce((s,q)=>s+(q.marks||0),0);
+  document.getElementById('submitSummary').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+      <div>Title: <strong>${esc(STATE.currentPaper.title)}</strong></div>
+      <div>Questions: <strong>${STATE.questions.length}</strong></div>
+      <div>MCQ: <strong>${mcq}</strong></div><div>Essay: <strong>${essay}</strong></div>
+      <div>Total Marks: <strong>${marks}</strong></div>
+    </div>`;
+  openModal('submitModal');
+}
+
+async function submitPaper() {
+  closeModal('submitModal');
+  showLoader('Submitting...');
+  try {
+    const data = await api('PATCH', `/api/papers/${STATE.currentPaper.id}/submit`);
+    const idx = STATE.papers.findIndex(p=>p.id===STATE.currentPaper.id);
+    const updated = {...STATE.currentPaper, status: data?.status||'submitted'};
+    if (idx!==-1) STATE.papers[idx] = updated;
+    STATE.currentPaper = updated;
+    updateBadges();
+    toast('Paper submitted! 🎉','success');
+    openFEditor(STATE.currentPaper.id);
+  } catch(e) { toast(e.message,'error'); }
+  hideLoader();
+}
+
+async function openFPaperView(paperId) {
+  const paper = STATE.papers.find(p=>p.id===paperId);
+  if (!paper) return;
+  await loadQuestionsForPaper(paperId);
+  openPaperViewModal(paper, 'faculty');
+}
+
+// ═══════════════════════════════════════════════════
+//  MODERATOR — REVIEW
+// ═══════════════════════════════════════════════════
+async function openMReview(paperId) {
+  showLoader('Loading paper...');
+  try {
+    const data = await api('GET', `/api/papers/${paperId}`);
+    STATE.currentPaper = data;
+    STATE.questions = data.questions || [];
+    openPaperViewModal(data, 'moderator');
+  } catch(e) { toast(e.message,'error'); }
+  hideLoader();
+}
+
+async function moderate(action) {
+  const note = document.getElementById('moderatorNote')?.value.trim();
+  if (action==='reject' && !note) { toast('Provide feedback for rejection','error'); return; }
+  showLoader(action==='approve'?'Approving...':'Rejecting...');
+  try {
+    const data = await api('PATCH', `/api/papers/${STATE.currentPaper.id}/moderate`, { action, note: note||null });
+    const idx = STATE.papers.findIndex(p=>p.id===STATE.currentPaper.id);
+    if (idx!==-1) STATE.papers[idx] = {...STATE.papers[idx], status: data.status||action==='approve'?'approved':'rejected'};
+    updateBadges();
+    closeModal('viewPaperModal');
+    toast(action==='approve'?'✅ Approved!':'❌ Rejected','success');
+    renderModeratorPage(document.querySelector('#mnav-queue.active')?'queue':'dashboard');
+  } catch(e) { toast(e.message,'error'); }
+  hideLoader();
+}
+
+// ═══════════════════════════════════════════════════
+//  SHARED PAPER VIEW MODAL
+// ═══════════════════════════════════════════════════
+function openPaperViewModal(paper, viewerRole) {
+  document.getElementById('viewPaperTitle').textContent = paper.title;
+  document.getElementById('viewPaperSub').textContent = `${paper.subject_name||''} · Faculty: ${paper.faculty_name||paper.created_by||'—'}`;
+
+  const qsHTML = STATE.questions.length ? STATE.questions.map((q,i)=>{
+    const qType = q.type||q.question_type;
+    const opts = ['a','b','c','d'].map(l=>({l:l.toUpperCase(),t:q['option_'+l]})).filter(o=>o.t);
+    const correct = (q.correct_option||'').toUpperCase();
+    return `<div class="question-item">
+      <div class="q-header"><div class="q-number">${i+1}</div><div class="q-text">${q.question_text||''}</div></div>
+      <div class="q-meta"><span class="chip">${qType==='mcq'?'📋 MCQ':'✍️ Essay'}</span><span class="chip chip-green">📊 ${q.marks} mark${q.marks!=1?'s':''}</span></div>
+      ${qType==='mcq'&&opts.length?`<div class="q-options">${opts.map(o=>`<div class="q-opt ${o.l===correct?'correct':''}"><strong>${o.l}.</strong> <span>${o.t}</span>${o.l===correct?' ✓ Correct':''}</div>`).join('')}</div>`:''}
+    </div>`;
+  }).join('') : `<div class="empty"><div class="empty-icon">❓</div><p>No questions</p></div>`;
+
+  const isDecidable = viewerRole==='moderator' && ['submitted','under_review'].includes(paper.status);
+  const isEditable = viewerRole==='faculty' && canEdit(paper);
+
+  document.getElementById('viewPaperBody').innerHTML = `
+    <div class="paper-info-grid">
+      <div class="info-item"><div class="info-label">Subject</div><div class="info-val">${esc(paper.subject_name||'—')}</div></div>
+      <div class="info-item"><div class="info-label">Status</div><div class="info-val">${statusBadge(paper.status)}</div></div>
+      <div class="info-item"><div class="info-label">Total Marks</div><div class="info-val">${paper.total_marks??'—'}</div></div>
+      <div class="info-item"><div class="info-label">Duration</div><div class="info-val">${paper.duration_mins?paper.duration_mins+' min':'—'}</div></div>
+    </div>
+    ${paper.rejection_note?`<div class="rejection-box" style="margin-bottom:14px"><div class="rej-label">💬 Feedback</div><p>${esc(paper.rejection_note)}</p></div>`:''}
+    <div class="section-sep"></div>
+    <h3 style="font-size:14px;font-weight:600;margin-bottom:10px">Questions (${STATE.questions.length})</h3>
+    <div class="question-list">${qsHTML}</div>
+    ${isDecidable?`<div class="decision-box">
+      <h3>Moderation Decision</h3>
+      <div class="form-group"><label>Comments for Faculty</label>
+        <textarea id="moderatorNote" placeholder="Required for rejection, optional for approval..."></textarea></div>
+      <div class="decision-btns">
+        <button class="btn btn-success" onclick="moderate('approve')">✅ Approve</button>
+        <button class="btn btn-danger" onclick="moderate('reject')">❌ Reject</button>
+      </div>
+    </div>`:''}`;
+
+  document.getElementById('viewPaperFooter').innerHTML = `
+    <button class="btn btn-secondary" onclick="closeModal('viewPaperModal')">Close</button>
+    ${isEditable?`<button class="btn btn-primary" onclick="closeModal('viewPaperModal');openFEditor(${paper.id})">✏️ Edit</button>`:''}`;
+
+  openModal('viewPaperModal');
+}
+
+// ═══════════════════════════════════════════════════
+//  QUILL EDITORS
+// ═══════════════════════════════════════════════════
+let quillQ = null, quillOpts = [], activeOptQ = null, eqTarget = null;
+
+const TOOLBAR_FULL  = [[{header:[false,2,3]}],['bold','italic','underline'],[{script:'sub'},{script:'super'}],[{list:'ordered'},{list:'bullet'}],['clean']];
+const TOOLBAR_MINI  = [['bold','italic'],[{script:'sub'},{script:'super'}]];
+
+function initQuillEditors() {
+  if (quillQ) return;
+  quillQ = new Quill('#qTextEditor', { theme:'snow', placeholder:'Question text...', modules:{ toolbar: TOOLBAR_FULL } });
+  quillOpts = [0,1,2,3].map(i => {
+    const q = new Quill(`#optEditor${i}`, { theme:'snow', placeholder:`Option ${String.fromCharCode(65+i)}...`, modules:{ toolbar: TOOLBAR_MINI } });
+    q.root.addEventListener('focus', () => activeOptQ = q);
+    return q;
+  });
+}
+
+function getQHTML(q) { const h=q.root.innerHTML; return(h==='<p><br></p>'||h==='<p></p>')?'':h; }
+function setQHTML(q,html) { if(!html){q.setContents([]);return;} q.root.innerHTML=html; }
+
+function insertSym(target, sym) { const q=target==='q'?quillQ:null; if(!q)return; const r=q.getSelection(true); q.insertText(r?r.index:q.getLength(),sym); }
+function insertSymOpt(sym) { const q=activeOptQ||quillOpts[0]; const r=q.getSelection(true); q.insertText(r?r.index:q.getLength(),sym); }
+
+function openEqDialog(target) { eqTarget=target==='q'?quillQ:(activeOptQ||quillOpts[0]); document.getElementById('eqInput').value=''; document.getElementById('eqPreview').innerHTML=''; openModal('eqModal'); setTimeout(()=>document.getElementById('eqInput').focus(),100); }
+function previewEq() { const l=document.getElementById('eqInput').value.trim(); const p=document.getElementById('eqPreview'); if(!l){p.innerHTML='';return;} try{katex.render(l,p,{throwOnError:false,displayMode:true});}catch(e){p.innerHTML=`<span style="color:red;font-size:12px">${e.message}</span>`;} }
+function setEqEx(l) { document.getElementById('eqInput').value=l; previewEq(); }
+function confirmEq() { const l=document.getElementById('eqInput').value.trim(); if(!l||!eqTarget)return; try{const r=eqTarget.getSelection(true);eqTarget.insertEmbed(r?r.index:eqTarget.getLength(),'formula',l);eqTarget.insertText((r?r.index:eqTarget.getLength())+1,' ');}catch(e){const r=eqTarget.getSelection(true);eqTarget.insertText(r?r.index:0,l);} closeModal('eqModal'); }
+
+// ═══════════════════════════════════════════════════
+//  QUESTION CRUD
+// ═══════════════════════════════════════════════════
+function openAddQuestion() {
+  STATE.editingQIndex = null;
+  document.getElementById('qModalTitle').textContent = 'Add Question';
+  setQHTML(quillQ,''); document.getElementById('qMarks').value=''; document.getElementById('qSection').value='';
+  quillOpts.forEach(q=>setQHTML(q,''));
+  document.querySelectorAll('input[name="correctOpt"]').forEach(r=>r.checked=false);
+  document.querySelector('input[name="qType"][value="mcq"]').checked=true;
+  onQTypeChange(); openModal('questionModal'); setTimeout(()=>quillQ.focus(),200);
+}
+
+function editQuestion(index) {
+  const q=STATE.questions[index]; STATE.editingQIndex=index;
+  document.getElementById('qModalTitle').textContent='Edit Question';
+  setQHTML(quillQ,q.question_text||''); document.getElementById('qMarks').value=q.marks||''; document.getElementById('qSection').value='';
+  const isEssay=(q.type||q.question_type)==='essay';
+  document.querySelector(`input[name="qType"][value="${isEssay?'essay':'mcq'}"]`).checked=true;
+  onQTypeChange();
+  if(!isEssay){
+    ['a','b','c','d'].forEach((l,i)=>setQHTML(quillOpts[i],q['option_'+l]||''));
+    const ci=['a','b','c','d'].indexOf((q.correct_option||'').toLowerCase());
+    if(ci!==-1){const r=document.querySelector(`input[name="correctOpt"][value="${ci}"]`);if(r)r.checked=true;}
+  }
+  openModal('questionModal');
+}
+
+function onQTypeChange() {
+  const isMcq=document.querySelector('input[name="qType"]:checked').value==='mcq';
+  document.getElementById('mcqSection').style.display=isMcq?'':'none';
+  document.getElementById('essaySection').style.display=isMcq?'none':'';
+}
+
+async function saveQuestion() {
+  const qType=document.querySelector('input[name="qType"]:checked').value;
+  const text=getQHTML(quillQ); const marks=parseInt(document.getElementById('qMarks').value);
+  if(!text){toast('Question text required','error');return;}
+  if(!marks||marks<1){toast('Enter valid marks','error');return;}
+  let qData={paper_id:STATE.currentPaper.id,type:qType,question_text:text,marks};
+  if(qType==='mcq'){
+    const opts=quillOpts.map(q=>getQHTML(q));
+    if(opts.some(o=>!o)){toast('Fill all 4 options','error');return;}
+    const ce=document.querySelector('input[name="correctOpt"]:checked');
+    if(!ce){toast('Select correct answer','error');return;}
+    const ci=parseInt(ce.value); const letters=['a','b','c','d'];
+    opts.forEach((opt,i)=>{qData['option_'+letters[i]]=opt;});
+    qData.correct_option=letters[ci].toUpperCase();
+  }
+  showLoader('Saving...');
+  try {
+    if(STATE.editingQIndex!==null){
+      const eq=STATE.questions[STATE.editingQIndex];
+      const data=await api('PUT',`/api/questions/${eq.id}`,qData);
+      STATE.questions[STATE.editingQIndex]=data||{...eq,...qData};
+      toast('Updated!','success');
+    } else {
+      const data=await api('POST','/api/questions',qData);
+      STATE.questions.push(data||{...qData,id:Date.now()});
+      toast('Added!','success');
+    }
+    const idx=STATE.papers.findIndex(p=>p.id===STATE.currentPaper.id);
+    if(idx!==-1)STATE.papers[idx].question_count=STATE.questions.length;
+    closeModal('questionModal');
+    document.getElementById('questionList').innerHTML=renderQList();
+    document.getElementById('qCount').textContent=STATE.questions.length;
+  } catch(e){toast(e.message,'error');}
+  hideLoader();
+}
+
+async function deleteQuestion(index) {
+  const q=STATE.questions[index];
+  if(!confirm(`Delete question ${index+1}?`))return;
+  showLoader('Deleting...');
+  try {
+    await api('DELETE',`/api/questions/${q.id}`);
+    STATE.questions.splice(index,1);
+    const idx=STATE.papers.findIndex(p=>p.id===STATE.currentPaper.id);
+    if(idx!==-1)STATE.papers[idx].question_count=STATE.questions.length;
+    toast('Deleted','info');
+    document.getElementById('questionList').innerHTML=renderQList();
+    document.getElementById('qCount').textContent=STATE.questions.length;
+  } catch(e){toast(e.message,'error');}
+  hideLoader();
+}
+
+// ═══════════════════════════════════════════════════
+//  API & UTILITIES
+// ═══════════════════════════════════════════════════
+async function api(method,path,body){
+  const opts={method,headers:{'Content-Type':'application/json','Authorization':`Bearer ${STATE.token}`}};
+  if(body)opts.body=JSON.stringify(body);
+  const res=await fetch(path,opts);
+  if(res.status===401){logout();return null;}
+  const data=await res.json();
+  if(!res.ok)throw new Error(data.error||data.message||'Request failed');
+  return data;
+}
+
+function statusBadge(status){
+  const m={draft:['draft','✏️ Draft'],submitted:['submitted','⏳ Submitted'],under_review:['review','🔍 Under Review'],approved:['approved','✅ Approved'],rejected:['rejected','❌ Rejected']};
+  const[cls,label]=m[status]||['draft',status||'—'];
+  return `<span class="badge badge-${cls}">${label}</span>`;
+}
+
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function timeAgo(d){if(!d)return'—';const diff=Date.now()-new Date(d).getTime();const m=Math.floor(diff/60000);if(m<1)return'just now';if(m<60)return m+'m ago';const h=Math.floor(m/60);if(h<24)return h+'h ago';return Math.floor(h/24)+'d ago';}
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+function showLoader(msg){document.getElementById('loadingMsg').textContent=msg||'Loading...';document.getElementById('loadingOverlay').classList.add('show');}
+function hideLoader(){document.getElementById('loadingOverlay').classList.remove('show');}
+function toast(msg,type='info'){const el=document.createElement('div');el.className=`toast toast-${type}`;el.innerHTML=`<span>${type==='success'?'✓':type==='error'?'✕':'ℹ'}</span> ${esc(msg)}`;document.getElementById('toast-container').appendChild(el);setTimeout(()=>el.remove(),3500);}
+function logout(){localStorage.removeItem('pg_token');localStorage.removeItem('pg_user');window.location.href='/';}
+
+document.querySelectorAll('.modal-overlay').forEach(o=>{o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');});});
+</script>
+</body>
+</html>
