@@ -651,20 +651,30 @@ app.get('/api/student/exam', auth(['student']), async (req, res) => {
 app.post('/api/student/answer', auth(['student']), async (req, res) => {
   const { seat_id, question_id, answer_text, answer_option } = req.body;
   try {
-    // Check if MCQ is correct
-    let is_correct = null;
-    if (answer_option) {
-      const { rows } = await pool.query('SELECT correct_option FROM questions WHERE id=$1', [question_id]);
-      if (rows[0]) is_correct = rows[0].correct_option === answer_option;
-    }
-    await pool.query(
-      `INSERT INTO answers (seat_id, question_id, answer_text, answer_option, is_correct)
-       VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (seat_id, question_id) DO UPDATE
-       SET answer_text=$3, answer_option=$4, is_correct=$5`,
-      [seat_id, question_id, answer_text||null, answer_option||null, is_correct]
+    // Get question details — correct answer + marks + type
+    const { rows: qRows } = await pool.query(
+      'SELECT correct_option, marks, type FROM questions WHERE id=$1',
+      [question_id]
     );
-    res.json({ saved: true });
+    if (!qRows[0]) return res.status(404).json({ error: 'Question not found' });
+    const question = qRows[0];
+
+    // For MCQ — check correctness and assign marks immediately
+    let is_correct = null;
+    let marks_scored = 0;
+    if (answer_option && question.type === 'mcq') {
+      is_correct = question.correct_option === answer_option;
+      marks_scored = is_correct ? parseFloat(question.marks) : 0;
+    }
+
+    await pool.query(
+      `INSERT INTO answers (seat_id, question_id, answer_text, answer_option, is_correct, marks_scored)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (seat_id, question_id) DO UPDATE
+       SET answer_text=$3, answer_option=$4, is_correct=$5, marks_scored=$6`,
+      [seat_id, question_id, answer_text||null, answer_option||null, is_correct, marks_scored]
+    );
+    res.json({ saved: true, is_correct, marks_scored });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -686,12 +696,13 @@ app.post('/api/student/submit', auth(['student']), async (req, res) => {
     const { rows: papers } = await pool.query('SELECT total_marks FROM question_papers WHERE id=$1', [seat.paper_id]);
     const maxMarks = papers[0]?.total_marks || 100;
 
-    // Auto-grade MCQs
+    // Auto-grade MCQs — use pre-stored marks_scored from answers table
     const { rows: mcqAnswers } = await pool.query(
-      `SELECT a.*, q.marks FROM answers a JOIN questions q ON q.id=a.question_id
+      `SELECT a.marks_scored FROM answers a
+       JOIN questions q ON q.id = a.question_id
        WHERE a.seat_id=$1 AND q.type='mcq'`, [seat_id]
     );
-    const mcqMarks = mcqAnswers.reduce((sum, a) => sum + (a.is_correct ? parseFloat(a.marks) : 0), 0);
+    const mcqMarks = mcqAnswers.reduce((sum, a) => sum + (parseFloat(a.marks_scored) || 0), 0);
 
     // Get violation count
     const { rows: viol } = await pool.query('SELECT COUNT(*) FROM violations WHERE seat_id=$1', [seat_id]);
