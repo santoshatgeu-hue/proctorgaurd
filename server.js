@@ -241,6 +241,17 @@ app.patch('/api/users/:id', auth(['admin']), async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.delete('/api/users/:id', auth(['admin']), async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Prevent deleting yourself
+    if (parseInt(id) === req.user.id)
+      return res.status(400).json({ error: 'Cannot delete your own account' });
+    await pool.query('DELETE FROM users WHERE id = $1', [id]);
+    res.json({ deleted: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── SUBJECTS ────────────────────────────────────────────────
 app.get('/api/subjects', auth(), async (req, res) => {
   try {
@@ -258,6 +269,13 @@ app.post('/api/subjects', auth(['admin']), async (req, res) => {
       [code.toUpperCase(), name, department || null]
     );
     res.status(201).json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/subjects/:id', auth(['admin']), async (req, res) => {
+  try {
+    await pool.query('DELETE FROM subjects WHERE id = $1', [req.params.id]);
+    res.json({ deleted: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/subjects/bulk', auth(['admin']), upload.single('file'), async (req, res) => {
