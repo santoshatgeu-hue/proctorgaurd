@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProctorGuard — Student Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f4f0; --surface: #fff; --surface2: #f0ede6; --border: #e2ddd5;
+    --accent: #1a3a5c; --accent2: #2e6da4; --gold: #c8922a;
+    --text: #1c1c1c; --text-muted: #6b6560;
+    --success: #1e6b4a; --success-bg: #e6f4ed;
+    --warning: #8a5c00; --warning-bg: #fff5e0;
+    --danger: #8b1a1a; --danger-bg: #fdeaea;
+    --info: #1a4a7a; --info-bg: #e6f0fb;
+    --radius: 10px; --shadow: 0 2px 12px rgba(0,0,0,0.07); --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+
+  /* TOPBAR */
+  .topbar { background: var(--accent); color: white; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 58px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+  .topbar-brand { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 34px; height: 34px; background: var(--gold); border-radius: 8px; display: grid; place-items: center; font-size: 18px; }
+  .topbar-brand h1 { font-family: 'DM Serif Display', serif; font-size: 18px; font-weight: 400; }
+  .topbar-brand span { font-size: 11px; opacity: 0.6; margin-left: 2px; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 32px; height: 32px; background: var(--gold); border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+  .btn-logout { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: inherit; }
+  .btn-logout:hover { background: rgba(255,255,255,0.22); }
+
+  /* LAYOUT */
+  .layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 58px); }
+
+  /* SIDEBAR */
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; position: sticky; top: 58px; height: calc(100vh - 58px); overflow-y: auto; }
+  .sidebar-section { padding: 0 14px 16px; }
+  .sidebar-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); padding: 0 8px 8px; }
+  .nav-item { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-radius: 7px; cursor: pointer; transition: all 0.15s; color: var(--text-muted); font-size: 13px; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: #e8f0f9; color: var(--accent2); font-weight: 600; }
+  .nav-item .icon { font-size: 15px; width: 20px; text-align: center; }
+
+  /* MAIN */
+  .main { padding: 28px 32px; }
+  .page { display: none; }
+  .page.active { display: block; animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; } }
+
+  .page-header { margin-bottom: 22px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .page-title { font-family: 'DM Serif Display', serif; font-size: 26px; font-weight: 400; color: var(--accent); }
+  .page-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+
+  /* CARDS */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-weight: 600; font-size: 14px; color: var(--accent); }
+  .card-body { padding: 20px; }
+
+  /* STATS */
+  .stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 22px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; display: flex; align-items: center; gap: 14px; }
+  .stat-icon { width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center; font-size: 20px; flex-shrink: 0; }
+  .stat-val { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .stat-lbl { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+  /* BUTTONS */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 7px; font-size: 13px; font-family: inherit; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; white-space: nowrap; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #122a45; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-success { background: var(--success); color: white; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-gold { background: var(--gold); color: white; }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* EXAM LIST */
+  .exam-list { display: flex; flex-direction: column; gap: 14px; }
+  .exam-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; transition: box-shadow 0.15s; position: relative; overflow: hidden; }
+  .exam-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:4px; }
+  .exam-card.live::before { background: var(--success); }
+  .exam-card.upcoming::before { background: var(--gold); }
+  .exam-card.ended::before { background: var(--text-muted); }
+  .exam-card.submitted::before { background: var(--accent2); }
+  .exam-card:hover { box-shadow: var(--shadow-lg); }
+  .exam-info { flex: 1; }
+  .exam-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .exam-meta { font-size: 12px; color: var(--text-muted); display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
+  .exam-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  .badge-live { background: var(--success-bg); color: var(--success); }
+  .badge-upcoming { background: var(--warning-bg); color: var(--warning); }
+  .badge-ended { background: var(--surface2); color: var(--text-muted); }
+  .badge-submitted { background: var(--info-bg); color: var(--info); }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); padding: 10px 16px; background: var(--surface2); border-bottom: 1px solid var(--border); }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody td { padding: 12px 16px; font-size: 13px; vertical-align: middle; }
+
+  /* ═══════════════════════════════════════
+     EXAM INTERFACE
+  ═══════════════════════════════════════ */
+  #examInterface { display: none; }
+  #examInterface.active { display: flex; flex-direction: column; min-height: calc(100vh - 58px); }
+
+  /* EXAM TOPBAR */
+  .exam-topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 58px; z-index: 50; box-shadow: var(--shadow); }
+  .exam-topbar-info h2 { font-size: 15px; font-weight: 600; color: var(--accent); }
+  .exam-topbar-info p { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .timer-box { display: flex; align-items: center; gap: 10px; }
+  .timer { font-family: 'DM Serif Display', serif; font-size: 28px; font-weight: 400; color: var(--accent); letter-spacing: 0.04em; min-width: 90px; text-align: center; }
+  .timer.warning { color: var(--warning); }
+  .timer.danger { color: var(--danger); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.6;} }
+  .timer-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); text-align: center; }
+  .autosave-indicator { font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; }
+  .save-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+  .save-dot.saving { background: var(--gold); animation: pulse 0.5s infinite; }
+
+  /* EXAM BODY */
+  .exam-body { display: grid; grid-template-columns: 260px 1fr; flex: 1; }
+
+  /* QUESTION NAV PANEL */
+  .q-nav-panel { background: var(--surface); border-right: 1px solid var(--border); padding: 20px 16px; position: sticky; top: 108px; height: calc(100vh - 108px); overflow-y: auto; }
+  .q-nav-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 12px; }
+  .q-nav-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 6px; margin-bottom: 16px; }
+  .q-btn { width: 36px; height: 36px; border-radius: 7px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-muted); transition: all 0.15s; display: grid; place-items: center; }
+  .q-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+  .q-btn.current { border-color: var(--accent2); background: var(--accent2); color: white; }
+  .q-btn.answered { border-color: var(--success); background: var(--success-bg); color: var(--success); }
+  .q-btn.answered.current { background: var(--success); color: white; }
+  .q-nav-legend { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); }
+  .legend-dot { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid; flex-shrink: 0; }
+
+  /* QUESTION AREA */
+  .q-area { padding: 28px 32px; overflow-y: auto; }
+  .q-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; }
+  .q-card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .q-card-num { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+  .q-card-marks { font-size: 12px; font-weight: 600; color: var(--accent2); background: var(--info-bg); padding: 3px 10px; border-radius: 20px; }
+  .q-card-body { padding: 20px; }
+  .q-text { font-size: 15px; font-weight: 500; line-height: 1.7; margin-bottom: 20px; color: var(--text); }
+  .q-text .katex { font-size: 1.1em; }
+
+  /* MCQ OPTIONS */
+  .mcq-options { display: flex; flex-direction: column; gap: 10px; }
+  .mcq-option { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border: 2px solid var(--border); border-radius: 9px; cursor: pointer; transition: all 0.15s; background: var(--surface); }
+  .mcq-option:hover { border-color: var(--accent2); background: var(--info-bg); }
+  .mcq-option.selected { border-color: var(--accent2); background: var(--info-bg); }
+  .mcq-option input[type="radio"] { display: none; }
+  .mcq-radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border); flex-shrink: 0; display: grid; place-items: center; margin-top: 1px; transition: all 0.15s; }
+  .mcq-option.selected .mcq-radio { border-color: var(--accent2); background: var(--accent2); }
+  .mcq-option.selected .mcq-radio::after { content:''; width:8px; height:8px; border-radius:50%; background:white; }
+  .mcq-letter { font-size: 12px; font-weight: 700; color: var(--text-muted); width: 20px; flex-shrink: 0; margin-top: 1px; }
+  .mcq-option.selected .mcq-letter { color: var(--accent2); }
+  .mcq-text { font-size: 14px; line-height: 1.5; flex: 1; }
+
+  /* ESSAY SECTION */
+  .essay-section { display: flex; flex-direction: column; gap: 14px; }
+  .essay-note { background: var(--warning-bg); border: 1px solid #e8d5a0; border-radius: 8px; padding: 12px 16px; font-size: 13px; color: var(--warning); line-height: 1.6; }
+  .upload-zone { border: 2px dashed var(--border); border-radius: 10px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--surface2); }
+  .upload-zone:hover, .upload-zone.over { border-color: var(--accent2); background: var(--info-bg); }
+  .upload-zone.uploaded { border-color: var(--success); background: var(--success-bg); }
+  .upload-zone .uz-icon { font-size: 36px; margin-bottom: 10px; }
+  .upload-zone .uz-text { font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+  .upload-zone .uz-hint { font-size: 12px; color: var(--text-muted); }
+
+  /* NAV BUTTONS */
+  .q-nav-btns { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
+
+  /* MODAL */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: none; place-items: center; padding: 20px; backdrop-filter: blur(3px); }
+  .modal-overlay.open { display: grid; }
+  .modal { background: var(--surface); border-radius: 14px; box-shadow: var(--shadow-lg); width: 100%; max-width: 520px; animation: modalIn 0.2s ease; }
+  @keyframes modalIn { from{opacity:0;transform:scale(0.96);}to{opacity:1;transform:scale(1);} }
+  .modal-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); }
+  .modal-title { font-family: 'DM Serif Display', serif; font-size: 20px; color: var(--accent); }
+  .modal-body { padding: 20px 24px; }
+  .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+  /* EMPTY */
+  .empty { text-align: center; padding: 48px 24px; color: var(--text-muted); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.5; }
+  .empty h3 { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+
+  /* TOAST */
+  #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 999; display: flex; flex-direction: column; gap: 7px; }
+  .toast { padding: 11px 16px; border-radius: 9px; font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg); display: flex; align-items: center; gap: 8px; animation: toastIn 0.25s ease; min-width: 240px; }
+  @keyframes toastIn { from{opacity:0;transform:translateX(20px);}to{opacity:1;} }
+  .toast-success { background: var(--success); color: white; }
+  .toast-error { background: var(--danger); color: white; }
+  .toast-info { background: var(--accent2); color: white; }
+  .toast-warning { background: var(--gold); color: white; }
+
+  /* LOADER */
+  .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.8); z-index: 500; display: none; place-items: center; }
+  .loading-overlay.show { display: grid; }
+  .big-spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent2); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 10px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* RESULT PAGE */
+  .result-hero { text-align: center; padding: 40px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 20px; }
+  .result-icon { font-size: 56px; margin-bottom: 12px; }
+  .result-title { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--accent); margin-bottom: 6px; }
+  .result-sub { font-size: 14px; color: var(--text-muted); }
+
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: var(--surface2); color: var(--text-muted); }
+  .chip-green { background: var(--success-bg); color: var(--success); }
+  .chip-blue { background: var(--info-bg); color: var(--info); }
+
+  /* PROGRESS BAR */
+  .prog-wrap { background: var(--surface2); border-radius: 20px; height: 8px; overflow: hidden; margin-top: 8px; }
+  .prog-bar { height: 100%; border-radius: 20px; background: var(--accent2); transition: width 0.5s ease; }
+
+  .section-sep { height: 1px; background: var(--border); margin: 16px 0; }
+  .flex { display: flex; align-items: center; gap: 8px; }
+  .text-muted { color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <div class="logo-icon">🎓</div>
+    <h1>ProctorGuard <span>/ Student</span></h1>
+  </div>
+  <div class="topbar-right">
+    <div class="flex">
+      <div class="avatar" id="userAvatar">S</div>
+      <span style="font-size:13px" id="userNameDisplay">Student</span>
+    </div>
+    <button class="btn-logout" onclick="logout()">Sign Out</button>
+  </div>
+</div>
+
+<!-- DASHBOARD LAYOUT -->
+<div class="layout" id="dashLayout">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Navigation</div>
+      <button class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard"><span class="icon">🏠</span>Dashboard</button>
+      <button class="nav-item" onclick="showPage('exams')" id="nav-exams"><span class="icon">📝</span>My Exams</button>
+      <button class="nav-item" onclick="showPage('results')" id="nav-results"><span class="icon">📊</span>Results</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Welcome back 👋</div>
+          <div class="page-subtitle" id="dashSubtitle">Loading your exams...</div>
+        </div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-icon" style="background:var(--success-bg)">🟢</div><div><div class="stat-val" id="statLive">—</div><div class="stat-lbl">Live Now</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:var(--warning-bg)">📅</div><div><div class="stat-val" id="statUpcoming">—</div><div class="stat-lbl">Upcoming</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:var(--info-bg)">✅</div><div><div class="stat-val" id="statSubmitted">—</div><div class="stat-lbl">Submitted</div></div></div>
+      </div>
+
+      <div id="liveExamBanner" style="display:none" class="card" style="margin-bottom:20px">
+        <div class="card-body" style="background:var(--success-bg);border-radius:var(--radius)">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--success);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">🔴 Live Exam</div>
+              <div style="font-size:16px;font-weight:600" id="liveExamTitle">—</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:3px" id="liveExamMeta">—</div>
+            </div>
+            <button class="btn btn-success" onclick="startExam()" style="flex-shrink:0">Enter Exam →</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">All My Exams</span></div>
+        <div id="dashExamList" class="card-body">
+          <div class="empty"><div class="empty-icon">📝</div><p>Loading...</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXAMS PAGE -->
+    <div class="page" id="page-exams">
+      <div class="page-header">
+        <div><div class="page-title">My Exams</div><div class="page-subtitle">All scheduled and completed exams</div></div>
+        <button class="btn btn-secondary" onclick="loadAll()">🔄 Refresh</button>
+      </div>
+      <div class="exam-list" id="examList">
+        <div class="empty"><div class="empty-icon">📝</div><p>Loading...</p></div>
+      </div>
+    </div>
+
+    <!-- RESULTS PAGE -->
+    <div class="page" id="page-results">
+      <div class="page-header">
+        <div><div class="page-title">My Results</div><div class="page-subtitle">Exam results and performance</div></div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Exam</th><th>Subject</th><th>MCQ Marks</th><th>Total Marks</th><th>%</th><th>Grade</th><th>Status</th></tr></thead>
+            <tbody id="resultsTable"><tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text-muted)">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════
+     EXAM INTERFACE (full screen)
+═══════════════════════════════════════ -->
+<div id="examInterface">
+
+  <!-- EXAM TOPBAR -->
+  <div class="exam-topbar">
+    <div class="exam-topbar-info">
+      <h2 id="examTitle">Loading exam...</h2>
+      <p id="examSubject">Subject</p>
+    </div>
+    <div class="timer-box">
+      <div>
+        <div class="timer" id="timerDisplay">--:--</div>
+        <div class="timer-label">Time Left</div>
+      </div>
+    </div>
+    <div class="flex">
+      <div class="autosave-indicator">
+        <div class="save-dot" id="saveDot"></div>
+        <span id="saveStatus">Auto-save on</span>
+      </div>
+      <button class="btn btn-gold" onclick="confirmSubmit()">Submit Exam →</button>
+    </div>
+  </div>
+
+  <!-- EXAM BODY -->
+  <div class="exam-body">
+
+    <!-- QUESTION NAV PANEL -->
+    <div class="q-nav-panel">
+      <div class="q-nav-title">Questions</div>
+      <div class="q-nav-grid" id="qNavGrid"></div>
+      <div class="section-sep"></div>
+      <div class="q-nav-legend">
+        <div class="legend-item"><div class="legend-dot" style="border-color:var(--success);background:var(--success-bg)"></div>Answered</div>
+        <div class="legend-item"><div class="legend-dot" style="border-color:var(--border);background:var(--surface)"></div>Not answered</div>
+        <div class="legend-item"><div class="legend-dot" style="border-color:var(--accent2);background:var(--accent2)"></div>Current</div>
+      </div>
+      <div class="section-sep"></div>
+      <div style="font-size:12px;color:var(--text-muted);line-height:1.6">
+        <div><strong style="color:var(--text)" id="answeredCount">0</strong> of <strong style="color:var(--text)" id="totalCount">0</strong> answered</div>
+        <div class="prog-wrap" style="margin-top:8px"><div class="prog-bar" id="progressBar" style="width:0%"></div></div>
+      </div>
+      <div class="section-sep"></div>
+      <div style="font-size:11px;color:var(--text-muted);line-height:1.7">
+        📌 Click any question number to jump to it<br>
+        💾 Answers auto-save every 30 seconds
+      </div>
+    </div>
+
+    <!-- QUESTION CONTENT -->
+    <div class="q-area" id="qArea"></div>
+
+  </div>
+</div>
+
+<!-- ═══ MODALS ═══ -->
+
+<!-- Submit Confirmation -->
+<div class="modal-overlay" id="submitModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">Submit Exam?</div></div>
+    <div class="modal-body">
+      <div id="submitWarning" style="margin-bottom:14px"></div>
+      <div id="submitStats" style="background:var(--surface2);border-radius:8px;padding:14px;font-size:13px"></div>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:12px;line-height:1.6">
+        ⚠️ Once submitted you cannot make changes. Make sure you have uploaded your essay answer sheet if required.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('submitModal')">Go Back</button>
+      <button class="btn btn-success" onclick="doSubmit()">✅ Confirm Submit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Essay Upload Modal -->
+<div class="modal-overlay" id="uploadModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">📄 Upload Answer Sheet</div></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">
+        Upload a scanned copy or photo of your essay answer sheet. Accepted formats: PDF, JPG, PNG.
+      </p>
+      <div class="upload-zone" id="essayUploadZone"
+           onclick="document.getElementById('essayFileInput').click()"
+           ondragover="event.preventDefault();this.classList.add('over')"
+           ondragleave="this.classList.remove('over')"
+           ondrop="handleEssayDrop(event)">
+        <input type="file" id="essayFileInput" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="onEssayFileSelected(this)">
+        <div class="uz-icon" id="uploadIcon">📎</div>
+        <div class="uz-text" id="uploadText">Click or drag file here</div>
+        <div class="uz-hint">PDF, JPG, PNG — max 10MB</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('uploadModal')">Cancel</button>
+      <button class="btn btn-primary" id="doUploadBtn" onclick="doEssayUpload()" disabled>Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- Time Up Modal -->
+<div class="modal-overlay" id="timeUpModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" style="color:var(--danger)">⏰ Time's Up!</div></div>
+    <div class="modal-body">
+      <p style="font-size:13px;line-height:1.7;color:var(--text-muted)">
+        Your exam time has ended. Your MCQ answers have been auto-saved.
+        <br><br>
+        <strong style="color:var(--text)">If you have essay questions</strong>, please upload your scanned answer sheet now before the exam window closes.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal('timeUpModal');openModal('uploadModal')">📎 Upload Answer Sheet</button>
+      <button class="btn btn-gold" onclick="closeModal('timeUpModal');doSubmit()">Submit Now →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Result Modal -->
+<div class="modal-overlay" id="resultModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">🎉 Exam Submitted!</div></div>
+    <div class="modal-body" id="resultModalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal('resultModal');exitExam()">Go to Dashboard</button>
+    </div>
+  </div>
+</div>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div><div class="big-spinner"></div><div style="font-size:13px;color:var(--text-muted)" id="loadingMsg">Loading...</div></div>
+</div>
+<div id="toast-container"></div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════
+const STATE = {
+  user: null, token: null,
+  exams: [],          // all student's exams
+  results: [],
+  // Active exam
+  exam: null,         // current exam object
+  questions: [],      // questions for current exam
+  answers: {},        // { question_id: { answer_option, answer_text } }
+  currentQ: 0,        // current question index
+  seatId: null,
+  essayFile: null,
+  timerInterval: null,
+  autoSaveInterval: null,
+  secondsLeft: 0,
+  hasEssay: false,
+};
+
+// ═══════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+  const token = localStorage.getItem('pg_token');
+  const user  = JSON.parse(localStorage.getItem('pg_user') || 'null');
+  if (!token || !user) { window.location.href = '/'; return; }
+  if (user.role !== 'student') { window.location.href = '/'; return; }
+
+  STATE.token = token;
+  STATE.user  = user;
+
+  document.getElementById('userNameDisplay').textContent = user.name || user.email;
+  document.getElementById('userAvatar').textContent = (user.name || 'S')[0].toUpperCase();
+  document.getElementById('dashSubtitle').textContent = `Hello ${user.name || ''} — here's your exam overview`;
+
+  await loadAll();
+});
+
+// ═══════════════════════════════════════════════════
+//  API
+// ═══════════════════════════════════════════════════
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${STATE.token}` } };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(path, opts);
+  if (res.status === 401) { logout(); return null; }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || 'Request failed');
+  return data;
+}
+
+// ═══════════════════════════════════════════════════
+//  LOAD DATA
+// ═══════════════════════════════════════════════════
+async function loadAll() {
+  showLoader('Loading...');
+  try {
+    await Promise.all([loadExams(), loadResults()]);
+    renderDashboard();
+  } catch(e) { toast('Failed to load data', 'error'); }
+  hideLoader();
+}
+
+async function loadExams() {
+  try {
+    const data = await api('GET', '/api/student/exams');
+    STATE.exams = Array.isArray(data) ? data : [];
+  } catch(e) { STATE.exams = []; }
+}
+
+async function loadResults() {
+  try {
+    const data = await api('GET', '/api/student/results');
+    STATE.results = Array.isArray(data) ? data : [];
+  } catch(e) { STATE.results = []; }
+}
+
+// ═══════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════
+function showPage(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + pageId)?.classList.add('active');
+  document.getElementById('nav-' + pageId)?.classList.add('active');
+  if (pageId === 'exams') renderExamList();
+  if (pageId === 'results') renderResults();
+  if (pageId === 'dashboard') renderDashboard();
+}
+
+// ═══════════════════════════════════════════════════
+//  DASHBOARD
+// ═══════════════════════════════════════════════════
+function renderDashboard() {
+  const now = new Date();
+  const live = STATE.exams.filter(e => e.seat_status !== 'submitted' && new Date(e.scheduled_at) <= now && new Date(e.ends_at) >= now);
+  const upcoming = STATE.exams.filter(e => new Date(e.scheduled_at) > now);
+  const submitted = STATE.exams.filter(e => e.seat_status === 'submitted');
+
+  document.getElementById('statLive').textContent = live.length;
+  document.getElementById('statUpcoming').textContent = upcoming.length;
+  document.getElementById('statSubmitted').textContent = submitted.length;
+
+  // Live banner
+  if (live.length > 0) {
+    const liveExam = live[0];
+    document.getElementById('liveExamBanner').style.display = '';
+    document.getElementById('liveExamTitle').textContent = liveExam.title;
+    document.getElementById('liveExamMeta').textContent = `${liveExam.subject_name} · Ends ${formatTime(liveExam.ends_at)}`;
+  } else {
+    document.getElementById('liveExamBanner').style.display = 'none';
+  }
+
+  // Exam list
+  const el = document.getElementById('dashExamList');
+  if (!STATE.exams.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📝</div><h3>No exams scheduled</h3><p>Your exams will appear here once assigned by admin.</p></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="exam-list">${STATE.exams.map(e => examCardHTML(e)).join('')}</div>`;
+}
+
+// ═══════════════════════════════════════════════════
+//  EXAM LIST
+// ═══════════════════════════════════════════════════
+function renderExamList() {
+  const el = document.getElementById('examList');
+  if (!STATE.exams.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📝</div><h3>No exams yet</h3><p>Your exams will appear here when scheduled.</p></div>`;
+    return;
+  }
+  el.innerHTML = STATE.exams.map(e => examCardHTML(e)).join('');
+}
+
+function examCardHTML(e) {
+  const now = new Date();
+  const start = new Date(e.scheduled_at);
+  const end   = new Date(e.ends_at);
+  const isSubmitted = e.seat_status === 'submitted';
+  const isLive = !isSubmitted && start <= now && end >= now;
+  const isUpcoming = start > now;
+  const isEnded = end < now && !isSubmitted;
+
+  const statusClass = isSubmitted ? 'submitted' : isLive ? 'live' : isUpcoming ? 'upcoming' : 'ended';
+  const badgeClass  = isSubmitted ? 'badge-submitted' : isLive ? 'badge-live' : isUpcoming ? 'badge-upcoming' : 'badge-ended';
+  const badgeText   = isSubmitted ? '✅ Submitted' : isLive ? '🔴 Live Now' : isUpcoming ? '📅 Upcoming' : '⏱ Ended';
+
+  return `<div class="exam-card ${statusClass}">
+    <div class="exam-info">
+      <div class="exam-title">${esc(e.title)}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${esc(e.subject_name||'')} ${e.subject_code?'· '+esc(e.subject_code):''}</div>
+      <div class="exam-meta">
+        <span>📅 ${formatDateTime(e.scheduled_at)}</span>
+        <span>⏱ ${e.duration_mins || '—'} min</span>
+        <span>❓ ${e.question_count || '—'} questions</span>
+        ${e.room_name ? `<span>🏫 ${esc(e.room_name)}</span>` : ''}
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px">
+      <span class="exam-badge ${badgeClass}">${badgeText}</span>
+      ${isLive ? `<button class="btn btn-success btn-sm" onclick="enterExam(${e.exam_id})">Enter Exam →</button>` : ''}
+      ${isUpcoming ? `<span style="font-size:12px;color:var(--text-muted)">Starts in ${timeUntil(e.scheduled_at)}</span>` : ''}
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+//  RESULTS
+// ═══════════════════════════════════════════════════
+function renderResults() {
+  const tbody = document.getElementById('resultsTable');
+  if (!STATE.results.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text-muted)">No results yet</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = STATE.results.map(r => `
+    <tr>
+      <td><strong>${esc(r.exam_title||'—')}</strong></td>
+      <td>${esc(r.subject_name||'—')}</td>
+      <td>${r.mcq_marks ?? '—'}</td>
+      <td>${r.total_marks ?? '—'} / ${r.max_marks ?? '—'}</td>
+      <td>${r.percentage ? r.percentage + '%' : '—'}</td>
+      <td><strong style="font-size:15px;color:var(--accent)">${r.grade || '—'}</strong></td>
+      <td><span class="chip ${r.essay_marks !== null ? 'chip-green' : 'chip-blue'}">${r.essay_marks !== null ? '✅ Graded' : '⏳ Pending'}</span></td>
+    </tr>`).join('');
+}
+
+// ═══════════════════════════════════════════════════
+//  ENTER / START EXAM
+// ═══════════════════════════════════════════════════
+function startExam() { enterExam(null); }
+
+async function enterExam(examId) {
+  showLoader('Loading exam...');
+  try {
+    const data = await api('GET', '/api/student/exam');
+    if (!data || !data.questions) {
+      toast('No active exam found for you right now', 'error');
+      hideLoader(); return;
+    }
+
+    STATE.exam      = data;
+    STATE.questions = data.questions || [];
+    STATE.seatId    = data.seat_id;
+    STATE.answers   = {};
+    STATE.currentQ  = 0;
+    STATE.hasEssay  = STATE.questions.some(q => q.type === 'essay');
+
+    // Calculate time left
+    const endsAt = new Date(data.ends_at);
+    STATE.secondsLeft = Math.max(0, Math.floor((endsAt - new Date()) / 1000));
+
+    // Show exam interface
+    document.getElementById('dashLayout').style.display = 'none';
+    document.getElementById('examInterface').classList.add('active');
+
+    document.getElementById('examTitle').textContent   = data.title;
+    document.getElementById('examSubject').textContent = `${data.subject_name} · ${data.duration_mins} min · ${STATE.questions.length} questions`;
+
+    renderQNav();
+    renderQuestion(0);
+    startTimer();
+    startAutoSave();
+
+    hideLoader();
+  } catch(e) {
+    toast(e.message || 'Could not load exam', 'error');
+    hideLoader();
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  QUESTION RENDERING
+// ═══════════════════════════════════════════════════
+function renderQuestion(index) {
+  STATE.currentQ = index;
+  const q = STATE.questions[index];
+  if (!q) return;
+
+  renderQNav(); // update nav highlighting
+
+  const area = document.getElementById('qArea');
+  const qType = q.type || q.question_type;
+  const ans = STATE.answers[q.id] || {};
+
+  // Render question text — handle KaTeX
+  const qTextHTML = renderMath(q.question_text || '');
+
+  let optionsHTML = '';
+  if (qType === 'mcq') {
+    const letters = ['A','B','C','D'];
+    const opts = letters.map((l,i) => ({ l, t: q['option_' + l.toLowerCase()] })).filter(o => o.t);
+    optionsHTML = `<div class="mcq-options">
+      ${opts.map(o => `
+        <label class="mcq-option ${ans.answer_option === o.l ? 'selected' : ''}" onclick="selectMCQ(${q.id}, '${o.l}')">
+          <div class="mcq-radio"></div>
+          <span class="mcq-letter">${o.l}.</span>
+          <span class="mcq-text">${renderMath(o.t)}</span>
+        </label>`).join('')}
+    </div>`;
+  } else {
+    // Essay
+    optionsHTML = `<div class="essay-section">
+      <div class="essay-note">
+        📝 <strong>Essay Question</strong> — Write your answer on paper. You will upload a scanned copy before submitting.
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" onclick="openModal('uploadModal')">
+          📎 Upload Answer Sheet
+        </button>
+        ${STATE.essayFile ? `<span style="margin-left:10px;font-size:13px;color:var(--success)">✅ ${esc(STATE.essayFile.name)} uploaded</span>` : ''}
+      </div>
+    </div>`;
+  }
+
+  area.innerHTML = `
+    <div class="q-card">
+      <div class="q-card-header">
+        <span class="q-card-num">Question ${index + 1} of ${STATE.questions.length}</span>
+        <span class="q-card-marks">${q.marks} mark${q.marks != 1 ? 's' : ''}</span>
+      </div>
+      <div class="q-card-body">
+        <div class="q-text">${qTextHTML}</div>
+        ${optionsHTML}
+      </div>
+    </div>
+    <div class="q-nav-btns">
+      <button class="btn btn-secondary" onclick="goQ(${index - 1})" ${index === 0 ? 'disabled' : ''}>← Previous</button>
+      <span style="font-size:13px;color:var(--text-muted)">${index + 1} / ${STATE.questions.length}</span>
+      ${index < STATE.questions.length - 1
+        ? `<button class="btn btn-primary" onclick="goQ(${index + 1})">Next →</button>`
+        : `<button class="btn btn-gold" onclick="confirmSubmit()">Submit Exam →</button>`}
+    </div>`;
+}
+
+function goQ(index) {
+  if (index < 0 || index >= STATE.questions.length) return;
+  renderQuestion(index);
+}
+
+function renderQNav() {
+  const grid = document.getElementById('qNavGrid');
+  grid.innerHTML = STATE.questions.map((q, i) => {
+    const answered = !!STATE.answers[q.id]?.answer_option || !!STATE.answers[q.id]?.answer_text;
+    const isCurrent = i === STATE.currentQ;
+    return `<button class="q-btn ${isCurrent ? 'current' : ''} ${answered ? 'answered' : ''}" onclick="goQ(${i})">${i + 1}</button>`;
+  }).join('');
+
+  const answered = Object.keys(STATE.answers).filter(id => {
+    const a = STATE.answers[id];
+    return a.answer_option || a.answer_text;
+  }).length;
+  const total = STATE.questions.length;
+
+  document.getElementById('answeredCount').textContent = answered;
+  document.getElementById('totalCount').textContent = total;
+  document.getElementById('progressBar').style.width = total > 0 ? (answered / total * 100) + '%' : '0%';
+}
+
+function renderMath(html) {
+  if (!html) return '';
+  // Replace LaTeX formula embeds from Quill
+  return html.replace(/<span class="ql-formula"[^>]*data-value="([^"]*)"[^>]*>.*?<\/span>/g, (match, latex) => {
+    try { return katex.renderToString(decodeURIComponent(latex), { throwOnError: false }); }
+    catch(e) { return match; }
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  ANSWER HANDLING
+// ═══════════════════════════════════════════════════
+function selectMCQ(questionId, option) {
+  STATE.answers[questionId] = { answer_option: option };
+  // Update UI
+  document.querySelectorAll('.mcq-option').forEach(el => el.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  renderQNav();
+  // Save immediately
+  saveAnswer(questionId, { answer_option: option });
+}
+
+async function saveAnswer(questionId, answerData) {
+  try {
+    await api('POST', '/api/student/answer', {
+      seat_id: STATE.seatId,
+      question_id: questionId,
+      answer_option: answerData.answer_option || null,
+      answer_text: answerData.answer_text || null,
+    });
+  } catch(e) { /* silent fail, will retry on next autosave */ }
+}
+
+// ═══════════════════════════════════════════════════
+//  TIMER
+// ═══════════════════════════════════════════════════
+function startTimer() {
+  clearInterval(STATE.timerInterval);
+  STATE.timerInterval = setInterval(() => {
+    STATE.secondsLeft--;
+    updateTimerDisplay();
+    if (STATE.secondsLeft <= 0) {
+      clearInterval(STATE.timerInterval);
+      timeUp();
+    }
+  }, 1000);
+  updateTimerDisplay();
+}
+
+function updateTimerDisplay() {
+  const s = STATE.secondsLeft;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const display = h > 0
+    ? `${h}:${pad(m)}:${pad(sec)}`
+    : `${pad(m)}:${pad(sec)}`;
+
+  const el = document.getElementById('timerDisplay');
+  el.textContent = display;
+  el.className = 'timer';
+  if (s <= 300) el.className = 'timer warning';  // 5 min warning
+  if (s <= 60)  el.className = 'timer danger';   // 1 min danger
+}
+
+function pad(n) { return String(n).padStart(2, '0'); }
+
+function timeUp() {
+  clearInterval(STATE.autoSaveInterval);
+  // Save all pending answers
+  saveAllAnswers().then(() => {
+    if (STATE.hasEssay) {
+      openModal('timeUpModal');
+    } else {
+      doSubmit();
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  AUTO SAVE
+// ═══════════════════════════════════════════════════
+function startAutoSave() {
+  clearInterval(STATE.autoSaveInterval);
+  STATE.autoSaveInterval = setInterval(() => saveAllAnswers(), 30000);
+}
+
+async function saveAllAnswers() {
+  const dot = document.getElementById('saveDot');
+  const status = document.getElementById('saveStatus');
+  if (dot) dot.classList.add('saving');
+  if (status) status.textContent = 'Saving...';
+
+  try {
+    const promises = Object.entries(STATE.answers).map(([qId, ans]) =>
+      api('POST', '/api/student/answer', {
+        seat_id: STATE.seatId,
+        question_id: parseInt(qId),
+        answer_option: ans.answer_option || null,
+        answer_text: ans.answer_text || null,
+      }).catch(() => {})
+    );
+    await Promise.all(promises);
+    if (status) status.textContent = 'Saved ✓';
+  } catch(e) {
+    if (status) status.textContent = 'Save failed';
+  }
+
+  if (dot) dot.classList.remove('saving');
+  setTimeout(() => { if (status) status.textContent = 'Auto-save on'; }, 2000);
+}
+
+// ═══════════════════════════════════════════════════
+//  ESSAY UPLOAD
+// ═══════════════════════════════════════════════════
+function onEssayFileSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) { toast('File too large — max 10MB', 'error'); return; }
+  STATE.essayFile = file;
+  document.getElementById('uploadIcon').textContent = '✅';
+  document.getElementById('uploadText').textContent = file.name;
+  document.getElementById('essayUploadZone').classList.add('uploaded');
+  document.getElementById('doUploadBtn').disabled = false;
+}
+
+function handleEssayDrop(e) {
+  e.preventDefault();
+  document.getElementById('essayUploadZone').classList.remove('over');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const input = document.getElementById('essayFileInput');
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    onEssayFileSelected(input);
+  }
+}
+
+async function doEssayUpload() {
+  if (!STATE.essayFile) return;
+  const btn = document.getElementById('doUploadBtn');
+  btn.disabled = true; btn.textContent = 'Uploading...';
+  try {
+    const fd = new FormData();
+    fd.append('file', STATE.essayFile);
+    fd.append('seat_id', STATE.seatId);
+    const res = await fetch('/api/student/essay-upload', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${STATE.token}` },
+      body: fd,
+    });
+    const data = await res.json();
+    if (res.ok) {
+      toast('✅ Answer sheet uploaded!', 'success');
+      closeModal('uploadModal');
+      // Refresh essay question view if on one
+      renderQuestion(STATE.currentQ);
+    } else {
+      toast(data.error || 'Upload failed', 'error');
+    }
+  } catch(e) {
+    toast('Upload failed: ' + e.message, 'error');
+  }
+  btn.disabled = false; btn.textContent = 'Upload';
+}
+
+// ═══════════════════════════════════════════════════
+//  SUBMIT
+// ═══════════════════════════════════════════════════
+function confirmSubmit() {
+  const answered = Object.keys(STATE.answers).filter(id => STATE.answers[id]?.answer_option || STATE.answers[id]?.answer_text).length;
+  const unanswered = STATE.questions.length - answered;
+
+  let warningHTML = '';
+  if (unanswered > 0) {
+    warningHTML = `<div style="background:var(--warning-bg);border:1px solid #e8d5a0;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--warning)">
+      ⚠️ You have <strong>${unanswered}</strong> unanswered question${unanswered !== 1 ? 's' : ''}.
+    </div>`;
+  }
+  if (STATE.hasEssay && !STATE.essayFile) {
+    warningHTML += `<div style="background:var(--danger-bg);border:1px solid #f0c0c0;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--danger)">
+      ❌ You have essay questions but haven't uploaded your answer sheet yet.
+    </div>`;
+  }
+
+  document.getElementById('submitWarning').innerHTML = warningHTML;
+  document.getElementById('submitStats').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>Total questions: <strong>${STATE.questions.length}</strong></div>
+      <div>Answered: <strong>${answered}</strong></div>
+      <div>MCQ: <strong>${STATE.questions.filter(q=>q.type==='mcq').length}</strong></div>
+      <div>Essay: <strong>${STATE.questions.filter(q=>q.type!=='mcq').length}</strong></div>
+    </div>`;
+  openModal('submitModal');
+}
+
+async function doSubmit() {
+  closeModal('submitModal');
+  closeModal('timeUpModal');
+  clearInterval(STATE.timerInterval);
+  clearInterval(STATE.autoSaveInterval);
+
+  showLoader('Submitting exam...');
+  try {
+    // Save all answers one final time
+    await saveAllAnswers();
+    // Submit
+    const result = await api('POST', '/api/student/submit', { seat_id: STATE.seatId });
+
+    hideLoader();
+    document.getElementById('resultModalBody').innerHTML = `
+      <div style="text-align:center;padding:10px 0">
+        <div style="font-size:48px;margin-bottom:12px">🎉</div>
+        <div style="font-size:18px;font-weight:600;margin-bottom:6px">Exam Submitted Successfully!</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px">Your answers have been recorded.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:left">
+          <div style="background:var(--surface2);padding:12px;border-radius:8px">
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">MCQ Marks</div>
+            <div style="font-size:22px;font-weight:700;color:var(--accent);margin-top:4px">${result.mcq_marks ?? '—'}</div>
+          </div>
+          <div style="background:var(--surface2);padding:12px;border-radius:8px">
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Provisional Grade</div>
+            <div style="font-size:22px;font-weight:700;color:var(--accent);margin-top:4px">${result.grade ?? '—'}</div>
+          </div>
+        </div>
+        ${STATE.hasEssay ? `<div style="margin-top:14px;padding:12px;background:var(--warning-bg);border-radius:8px;font-size:13px;color:var(--warning)">
+          📝 Essay answers will be graded by your faculty. Final results will be updated.
+        </div>` : ''}
+      </div>`;
+    openModal('resultModal');
+
+    // Update local state
+    const examIdx = STATE.exams.findIndex(e => e.seat_id === STATE.seatId);
+    if (examIdx !== -1) STATE.exams[examIdx].seat_status = 'submitted';
+
+  } catch(e) {
+    hideLoader();
+    toast(e.message || 'Submit failed', 'error');
+  }
+}
+
+function exitExam() {
+  clearInterval(STATE.timerInterval);
+  clearInterval(STATE.autoSaveInterval);
+  document.getElementById('examInterface').classList.remove('active');
+  document.getElementById('dashLayout').style.display = '';
+  showPage('dashboard');
+  loadAll();
+}
+
+// ═══════════════════════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════════════════════
+function formatDateTime(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function formatTime(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleTimeString('en-IN', { timeStyle: 'short' });
+}
+
+function timeUntil(d) {
+  const diff = new Date(d) - new Date();
+  if (diff < 0) return 'now';
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function esc(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function showLoader(msg) { document.getElementById('loadingMsg').textContent = msg || 'Loading...'; document.getElementById('loadingOverlay').classList.add('show'); }
+function hideLoader() { document.getElementById('loadingOverlay').classList.remove('show'); }
+
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.innerHTML = `<span>${type==='success'?'✓':type==='error'?'✕':type==='warning'?'⚠':'ℹ'}</span> ${esc(msg)}`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function logout() {
+  clearInterval(STATE.timerInterval);
+  clearInterval(STATE.autoSaveInterval);
+  localStorage.removeItem('pg_token');
+  localStorage.removeItem('pg_user');
+  window.location.href = '/';
+}
+
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
+});
+</script>
+</body>
+</html>
