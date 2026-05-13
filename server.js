@@ -157,9 +157,9 @@ app.post('/api/admin/bulk-upload', auth(['admin']), upload.single('file'), async
         try {
           const hash = await bcrypt.hash(pass, 10);
           const { rows: inserted } = await pool.query(
-            `INSERT INTO users (name, email, password_hash, role, roll_number, department)
-             VALUES ($1, $2, $3, $4, $5, $6)
-             ON CONFLICT (email) DO UPDATE SET name=$1, role=$4
+            `INSERT INTO users (name, email, password_hash, role, roll_number, department, must_change_password)
+             VALUES ($1,$2,$3,$4,$5,$6, false)
+             ON CONFLICT (email) DO UPDATE SET name=$1, role=$4, must_change_password=false
              RETURNING id, name, email, role`,
             [name, email, hash, role === 'student' ? 'student' : role === 'faculty' ? 'faculty' : role === 'moderator' ? 'moderator' : 'proctor', roll || null, dept || null]
           );
@@ -220,7 +220,7 @@ app.post('/api/users', auth(['admin']), async (req, res) => {
   try {
     const hash = await bcrypt.hash(password || 'Welcome@123', 10);
     const { rows } = await pool.query(
-      'INSERT INTO users (name, email, password_hash, role, roll_number, department) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, name, email, role',
+    'INSERT INTO users (name, email, password_hash, role, roll_number, department, must_change_password) VALUES ($1,$2,$3,$4,$5,$6,false) RETURNING id, name, email, role', 
       [name, email.toLowerCase(), hash, role, roll_number || null, department || null]
     );
     res.status(201).json(rows[0]);
