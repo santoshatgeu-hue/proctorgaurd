@@ -157,11 +157,24 @@ app.post('/api/admin/bulk-upload', auth(['admin']), upload.single('file'), async
         try {
           const hash = await bcrypt.hash(pass, 10);
           const { rows: inserted } = await pool.query(
-            `INSERT INTO users (name, email, password_hash, role, roll_number, department, must_change_password)
-             VALUES ($1,$2,$3,$4,$5,$6, false)
-             ON CONFLICT (email) DO UPDATE SET name=$1, role=$4, must_change_password=false
-             RETURNING id, name, email, role`,
-            [name, email, hash, role === 'student' ? 'student' : role === 'faculty' ? 'faculty' : role === 'moderator' ? 'moderator' : 'proctor', roll || null, dept || null]
+          `INSERT INTO users (name, email, password_hash, role, roles, roll_number, department, must_change_password)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,false)
+           ON CONFLICT (email) DO UPDATE 
+           SET name=$1, 
+               role = CASE 
+               WHEN NOT ($4 = ANY(EXCLUDED.roles)) 
+               THEN $4 
+               ELSE users.role 
+              END,
+              roles = (
+               SELECT ARRAY(
+               SELECT DISTINCT unnest 
+               FROM unnest(users.roles || EXCLUDED.roles)
+               )
+             ),
+             must_change_password=false
+          RETURNING id, name, email, role, roles`,
+          [ name, email, hash, role, [role], roll || null, dept || null]
           );
           const userId = inserted[0].id;
 
