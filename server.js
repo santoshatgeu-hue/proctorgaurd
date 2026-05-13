@@ -244,9 +244,14 @@ app.patch('/api/users/:id', auth(['admin']), async (req, res) => {
 app.delete('/api/users/:id', auth(['admin']), async (req, res) => {
   const { id } = req.params;
   try {
-    // Prevent deleting yourself
     if (parseInt(id) === req.user.id)
       return res.status(400).json({ error: 'Cannot delete your own account' });
+
+    // Nullify foreign key references before deleting
+    await pool.query('UPDATE question_papers SET moderator_id = NULL WHERE moderator_id = $1', [id]);
+    await pool.query('UPDATE question_papers SET faculty_id = NULL WHERE faculty_id = $1', [id]);
+    await pool.query('UPDATE exam_rooms SET proctor_id = NULL WHERE proctor_id = $1', [id]);
+    await pool.query('UPDATE answers SET graded_by = NULL WHERE graded_by = $1', [id]);
     await pool.query('DELETE FROM users WHERE id = $1', [id]);
     res.json({ deleted: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
