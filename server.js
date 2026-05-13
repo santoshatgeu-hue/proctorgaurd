@@ -157,24 +157,11 @@ app.post('/api/admin/bulk-upload', auth(['admin']), upload.single('file'), async
         try {
           const hash = await bcrypt.hash(pass, 10);
           const { rows: inserted } = await pool.query(
-          `INSERT INTO users (name, email, password_hash, role, roles, roll_number, department, must_change_password)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,false)
-           ON CONFLICT (email) DO UPDATE 
-           SET name=$1, 
-               role = CASE 
-               WHEN NOT ($4 = ANY(EXCLUDED.roles)) 
-               THEN $4 
-               ELSE users.role 
-              END,
-              roles = (
-               SELECT ARRAY(
-               SELECT DISTINCT unnest 
-               FROM unnest(users.roles || EXCLUDED.roles)
-               )
-             ),
-             must_change_password=false
-          RETURNING id, name, email, role, roles`,
-          [ name, email, hash, role, [role], roll || null, dept || null]
+            `INSERT INTO users (name, email, password_hash, role, roll_number, department)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (email) DO UPDATE SET name=$1, role=$4
+             RETURNING id, name, email, role`,
+            [name, email, hash, role === 'student' ? 'student' : role === 'faculty' ? 'faculty' : role === 'moderator' ? 'moderator' : 'proctor', roll || null, dept || null]
           );
           const userId = inserted[0].id;
 
@@ -233,7 +220,7 @@ app.post('/api/users', auth(['admin']), async (req, res) => {
   try {
     const hash = await bcrypt.hash(password || 'Welcome@123', 10);
     const { rows } = await pool.query(
-    'INSERT INTO users (name, email, password_hash, role, roll_number, department, must_change_password) VALUES ($1,$2,$3,$4,$5,$6,false) RETURNING id, name, email, role', 
+      'INSERT INTO users (name, email, password_hash, role, roll_number, department) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, name, email, role',
       [name, email.toLowerCase(), hash, role, roll_number || null, department || null]
     );
     res.status(201).json(rows[0]);
@@ -257,14 +244,9 @@ app.patch('/api/users/:id', auth(['admin']), async (req, res) => {
 app.delete('/api/users/:id', auth(['admin']), async (req, res) => {
   const { id } = req.params;
   try {
+    // Prevent deleting yourself
     if (parseInt(id) === req.user.id)
       return res.status(400).json({ error: 'Cannot delete your own account' });
-
-    // Nullify foreign key references before deleting
-    await pool.query('UPDATE question_papers SET moderator_id = NULL WHERE moderator_id = $1', [id]);
-    await pool.query('UPDATE question_papers SET faculty_id = NULL WHERE faculty_id = $1', [id]);
-    await pool.query('UPDATE exam_rooms SET proctor_id = NULL WHERE proctor_id = $1', [id]);
-    await pool.query('UPDATE answers SET graded_by = NULL WHERE graded_by = $1', [id]);
     await pool.query('DELETE FROM users WHERE id = $1', [id]);
     res.json({ deleted: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -273,24 +255,7 @@ app.delete('/api/users/:id', auth(['admin']), async (req, res) => {
 // ── SUBJECTS ────────────────────────────────────────────────
 app.get('/api/subjects', auth(), async (req, res) => {
   try {
-    const userRoles = req.user.roles || [req.user.role];
-    const isAdmin = userRoles.includes('admin');
-    const isStudent = userRoles.includes('student');
-
-    // Admin and student get all subjects
-    if (isAdmin || isStudent) {
-      const { rows } = await pool.query('SELECT * FROM subjects ORDER BY code');
-      return res.json(rows);
-    }
-
-    // Faculty/moderator/proctor get only their assigned subjects
-    const { rows } = await pool.query(
-      `SELECT DISTINCT s.* FROM subjects s
-       JOIN faculty_subjects fs ON fs.subject_id = s.id
-       WHERE fs.faculty_id = $1
-       ORDER BY s.code`,
-      [req.user.id]
-    );
+    const { rows } = await pool.query('SELECT * FROM subjects ORDER BY code');
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -585,6 +550,60 @@ app.post('/api/exams/:id/seats', auth(['admin']), async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // STUDENT EXAM SESSION
 // ══════════════════════════════════════════════════════════════
+
+// GET /api/student/exams — all exams for logged in student
+app.get('/api/student/exams', auth(['student']), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT e.id as exam_id, e.title, e.scheduled_at, e.ends_at, e.status as exam_status,
+       qp.duration_mins, qp.id as paper_id,
+       s.name as subject_name, s.code as subject_code,
+       es.id as seat_id, es.status as seat_status, es.room_id,
+       er.name as room_name,
+       (SELECT COUNT(*) FROM questions WHERE paper_id = qp.id) as question_count
+       FROM exam_seats es
+       JOIN exams e ON e.id = es.exam_id
+       JOIN question_papers qp ON qp.id = e.paper_id
+       JOIN subjects s ON s.id = e.subject_id
+       LEFT JOIN exam_rooms er ON er.id = es.room_id
+       WHERE es.student_id = $1
+       ORDER BY e.scheduled_at DESC`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/student/results — results for logged in student
+app.get('/api/student/results', auth(['student']), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT r.*, e.title as exam_title, s.name as subject_name, s.code as subject_code
+       FROM results r
+       JOIN exams e ON e.id = r.exam_id
+       JOIN subjects s ON s.id = r.subject_id
+       WHERE r.student_id = $1
+       ORDER BY r.created_at DESC`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/student/essay-upload — upload scanned answer sheet
+app.post('/api/student/essay-upload', auth(['student']), upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  const { seat_id } = req.body;
+  try {
+    // Store file info — in production you'd upload to S3/Supabase Storage
+    // For now store the filename and mark essay as submitted
+    await pool.query(
+      `UPDATE exam_seats SET essay_file = $1, essay_uploaded_at = NOW() WHERE id = $2 AND student_id = $3`,
+      [req.file.originalname, seat_id, req.user.id]
+    );
+    res.json({ uploaded: true, filename: req.file.originalname });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // GET /api/student/exam — get active exam for logged in student
 app.get('/api/student/exam', auth(['student']), async (req, res) => {
