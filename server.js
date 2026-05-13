@@ -273,7 +273,24 @@ app.delete('/api/users/:id', auth(['admin']), async (req, res) => {
 // ── SUBJECTS ────────────────────────────────────────────────
 app.get('/api/subjects', auth(), async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM subjects ORDER BY code');
+    const userRoles = req.user.roles || [req.user.role];
+    const isAdmin = userRoles.includes('admin');
+    const isStudent = userRoles.includes('student');
+
+    // Admin and student get all subjects
+    if (isAdmin || isStudent) {
+      const { rows } = await pool.query('SELECT * FROM subjects ORDER BY code');
+      return res.json(rows);
+    }
+
+    // Faculty/moderator/proctor get only their assigned subjects
+    const { rows } = await pool.query(
+      `SELECT DISTINCT s.* FROM subjects s
+       JOIN faculty_subjects fs ON fs.subject_id = s.id
+       WHERE fs.faculty_id = $1
+       ORDER BY s.code`,
+      [req.user.id]
+    );
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
