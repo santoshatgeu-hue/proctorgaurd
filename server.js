@@ -774,6 +774,140 @@ app.post('/api/violations', auth(['student']), async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
+// PROCTOR ROUTES
+// ══════════════════════════════════════════════════════════════
+
+// GET /api/proctor/rooms — rooms assigned to this proctor
+app.get('/api/proctor/rooms', auth(['proctor','admin']), async (req, res) => {
+  try {
+    const userRoles = req.user.roles || [req.user.role];
+    const isAdmin = userRoles.includes('admin');
+    const q = isAdmin
+      ? `SELECT er.*, e.title as exam_title, e.scheduled_at, e.ends_at, e.status as exam_status,
+           u.name as proctor_name,
+           COUNT(es.id) as seat_count
+         FROM exam_rooms er
+         JOIN exams e ON e.id = er.exam_id
+         LEFT JOIN users u ON u.id = er.proctor_id
+         LEFT JOIN exam_seats es ON es.room_id = er.id
+         GROUP BY er.id, e.title, e.scheduled_at, e.ends_at, e.status, u.name
+         ORDER BY e.scheduled_at DESC`
+      : `SELECT er.*, e.title as exam_title, e.scheduled_at, e.ends_at, e.status as exam_status,
+           COUNT(es.id) as seat_count
+         FROM exam_rooms er
+         JOIN exams e ON e.id = er.exam_id
+         LEFT JOIN exam_seats es ON es.room_id = er.id
+         WHERE er.proctor_id = $1
+         GROUP BY er.id, e.title, e.scheduled_at, e.ends_at, e.status
+         ORDER BY e.scheduled_at DESC`;
+    const params = isAdmin ? [] : [req.user.id];
+    const { rows } = await pool.query(q, params);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/proctor/rooms/:id/seats — all students in a room with status
+app.get('/api/proctor/rooms/:id/seats', auth(['proctor','admin']), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT es.*, u.name as student_name, u.roll_number, u.email as student_email
+       FROM exam_seats es
+       JOIN users u ON u.id = es.student_id
+       WHERE es.room_id = $1
+       ORDER BY u.name`,
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/proctor/rooms/:id/violations — all violations in a room
+app.get('/api/proctor/rooms/:id/violations', auth(['proctor','admin']), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT v.*, u.name as student_name, u.roll_number, es.id as seat_id
+       FROM violations v
+       JOIN exam_seats es ON es.id = v.seat_id
+       JOIN users u ON u.id = es.student_id
+       WHERE es.room_id = $1
+       ORDER BY v.created_at DESC`,
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/proctor/violations — log a violation
+app.post('/api/proctor/violations', auth(['proctor','admin']), async (req, res) => {
+  const { seat_id, type, description, snapshot_url } = req.body;
+  if (!seat_id || !type) return res.status(400).json({ error: 'seat_id and type required' });
+  try {
+    // Get seat info for context
+    const { rows: seatRows } = await pool.query(
+      'SELECT exam_id, room_id, student_id FROM exam_seats WHERE id=$1', [seat_id]
+    );
+    if (!seatRows[0]) return res.status(404).json({ error: 'Seat not found' });
+    const seat = seatRows[0];
+
+    const { rows } = await pool.query(
+      `INSERT INTO violations (seat_id, student_id, exam_id, room_id, proctor_id, type, description, snapshot_url)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [seat_id, seat.student_id, seat.exam_id, seat.room_id, req.user.id, type, description||null, snapshot_url||null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/proctor/force-submit — force submit a student's exam
+app.post('/api/proctor/force-submit', auth(['proctor','admin']), async (req, res) => {
+  const { seat_id } = req.body;
+  if (!seat_id) return res.status(400).json({ error: 'seat_id required' });
+  try {
+    // Check seat exists and is not already submitted
+    const { rows: seatRows } = await pool.query(
+      'SELECT * FROM exam_seats WHERE id=$1', [seat_id]
+    );
+    if (!seatRows[0]) return res.status(404).json({ error: 'Seat not found' });
+    if (seatRows[0].submitted_at) return res.status(400).json({ error: 'Already submitted' });
+
+    // Mark as submitted
+    await pool.query(
+      `UPDATE exam_seats SET status='submitted', submitted_at=NOW() WHERE id=$1`,
+      [seat_id]
+    );
+
+    // Calculate MCQ marks
+    const { rows: answers } = await pool.query(
+      `SELECT a.marks_scored FROM answers a
+       JOIN questions q ON q.id = a.question_id
+       WHERE a.seat_id=$1 AND q.type='mcq'`, [seat_id]
+    );
+    const mcqMarks = answers.reduce((s,a) => s + (parseFloat(a.marks_scored)||0), 0);
+
+    // Get max marks
+    const { rows: paperRows } = await pool.query(
+      `SELECT qp.total_marks, e.subject_id FROM exam_seats es
+       JOIN exams e ON e.id = es.exam_id
+       JOIN question_papers qp ON qp.id = e.paper_id
+       WHERE es.id = $1`, [seat_id]
+    );
+    const maxMarks = parseFloat(paperRows[0]?.total_marks || 100);
+    const pct = (mcqMarks / maxMarks) * 100;
+    const grade = pct >= 90 ? 'O' : pct >= 75 ? 'A+' : pct >= 60 ? 'A' : pct >= 50 ? 'B' : pct >= 40 ? 'C' : 'F';
+
+    // Upsert result
+    await pool.query(
+      `INSERT INTO results (seat_id, exam_id, student_id, subject_id, mcq_marks, total_marks, max_marks, percentage, grade)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (seat_id) DO UPDATE SET mcq_marks=$5, total_marks=$6, percentage=$8, grade=$9`,
+      [seat_id, seatRows[0].exam_id, seatRows[0].student_id, paperRows[0]?.subject_id, mcqMarks, mcqMarks, maxMarks, pct.toFixed(2), grade]
+    );
+
+    res.json({ submitted: true, forced_by: req.user.id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════
 // RESULTS (Faculty grading essays)
 // ══════════════════════════════════════════════════════════════
 
