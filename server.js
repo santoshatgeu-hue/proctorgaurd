@@ -381,8 +381,7 @@ app.patch('/api/papers/:id', auth(['faculty','moderator','proctor','admin']), as
        SET title = COALESCE($1, title),
            total_marks = COALESCE($2, total_marks),
            duration_mins = COALESCE($3, duration_mins),
-           instructions = COALESCE($4, instructions),
-           updated_at = NOW()
+           instructions = COALESCE($4, instructions)
        WHERE id = $5
        RETURNING *`,
       [title || null, total_marks || null, duration_mins || null, instructions || null, req.params.id]
