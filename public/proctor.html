@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProctorGuard — Proctor Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f4f0; --surface: #fff; --surface2: #f0ede6; --border: #e2ddd5;
+    --accent: #1a3a5c; --accent2: #2e6da4; --gold: #c8922a;
+    --text: #1c1c1c; --text-muted: #6b6560;
+    --success: #1e6b4a; --success-bg: #e6f4ed;
+    --warning: #8a5c00; --warning-bg: #fff5e0;
+    --danger: #8b1a1a; --danger-bg: #fdeaea;
+    --info: #1a4a7a; --info-bg: #e6f0fb;
+    --radius: 10px; --shadow: 0 2px 12px rgba(0,0,0,0.07); --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+
+  /* TOPBAR */
+  .topbar { background: var(--accent); color: white; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 58px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+  .topbar-brand { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 34px; height: 34px; background: var(--gold); border-radius: 8px; display: grid; place-items: center; font-size: 18px; }
+  .topbar-brand h1 { font-family: 'DM Serif Display', serif; font-size: 18px; font-weight: 400; }
+  .topbar-brand span { font-size: 11px; opacity: 0.6; margin-left: 2px; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 32px; height: 32px; background: var(--gold); border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+  .btn-logout { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: inherit; }
+  .btn-logout:hover { background: rgba(255,255,255,0.22); }
+  .live-badge { background: var(--danger); color: white; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.6;} }
+
+  /* LAYOUT */
+  .layout { display: grid; grid-template-columns: 230px 1fr; min-height: calc(100vh - 58px); }
+
+  /* SIDEBAR */
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; position: sticky; top: 58px; height: calc(100vh - 58px); overflow-y: auto; }
+  .sidebar-section { padding: 0 14px 16px; }
+  .sidebar-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); padding: 0 8px 8px; }
+  .nav-item { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-radius: 7px; cursor: pointer; transition: all 0.15s; color: var(--text-muted); font-size: 13px; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: #e8f0f9; color: var(--accent2); font-weight: 600; }
+  .nav-item .icon { font-size: 15px; width: 20px; text-align: center; }
+  .nav-badge { margin-left: auto; background: var(--danger); color: white; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; }
+  .sidebar-divider { height: 1px; background: var(--border); margin: 4px 14px 14px; }
+
+  /* ROOM SELECTOR */
+  .room-selector { padding: 12px 14px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+  .room-selector label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); display: block; margin-bottom: 6px; }
+  .room-selector select { width: 100%; padding: 7px 10px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 13px; font-family: inherit; color: var(--text); background: var(--surface); outline: none; }
+  .room-selector select:focus { border-color: var(--accent2); }
+
+  /* MAIN */
+  .main { padding: 24px 28px; overflow-y: auto; }
+  .page { display: none; }
+  .page.active { display: block; animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(5px);}to{opacity:1;} }
+
+  .page-header { margin-bottom: 20px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .page-title { font-family: 'DM Serif Display', serif; font-size: 24px; font-weight: 400; color: var(--accent); }
+  .page-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+
+  /* CARDS */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .card-title { font-weight: 600; font-size: 14px; color: var(--accent); }
+  .card-body { padding: 18px; }
+
+  /* STATS */
+  .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 20px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; display: flex; align-items: center; gap: 12px; }
+  .stat-icon { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-size: 18px; flex-shrink: 0; }
+  .stat-val { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .stat-lbl { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+  /* BUTTONS */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 7px; font-size: 13px; font-family: inherit; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; white-space: nowrap; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #122a45; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-success { background: var(--success); color: white; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-warning { background: var(--gold); color: white; }
+  .btn-sm { padding: 5px 11px; font-size: 12px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* STUDENT GRID */
+  .student-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .student-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 14px; transition: all 0.15s; position: relative; overflow: hidden; }
+  .student-card::before { content:''; position:absolute; top:0;left:0;right:0;height:3px; }
+  .student-card.status-not_started::before { background: var(--text-muted); }
+  .student-card.status-in_progress::before { background: var(--success); }
+  .student-card.status-submitted::before { background: var(--accent2); }
+  .student-card.status-absent::before { background: var(--danger); }
+  .student-card.has-violation { border-color: var(--danger); }
+  .student-card:hover { box-shadow: var(--shadow-lg); }
+  .student-name { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .student-roll { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+  .student-status { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-not_started { background: var(--text-muted); }
+  .dot-in_progress { background: var(--success); animation: pulse 2s infinite; }
+  .dot-submitted { background: var(--accent2); }
+  .dot-absent { background: var(--danger); }
+  .student-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .violation-count { position: absolute; top: 8px; right: 8px; background: var(--danger); color: white; font-size: 10px; font-weight: 700; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; }
+
+  /* VIDEO FEED */
+  .video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .video-card { background: #111; border-radius: var(--radius); overflow: hidden; position: relative; aspect-ratio: 4/3; }
+  .video-card video { width: 100%; height: 100%; object-fit: cover; }
+  .video-label { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.8)); padding: 20px 10px 8px; color: white; font-size: 12px; font-weight: 600; }
+  .video-status { position: absolute; top: 8px; left: 8px; }
+  .video-card.no-feed { display: grid; place-items: center; background: var(--surface2); border: 1px solid var(--border); }
+  .video-card.no-feed .no-feed-msg { text-align: center; color: var(--text-muted); font-size: 12px; }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); padding: 10px 14px; background: var(--surface2); border-bottom: 1px solid var(--border); }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody td { padding: 11px 14px; font-size: 13px; vertical-align: middle; }
+
+  /* BADGES */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-not_started { background: var(--surface2); color: var(--text-muted); }
+  .badge-in_progress { background: var(--success-bg); color: var(--success); }
+  .badge-submitted { background: var(--info-bg); color: var(--info); }
+  .badge-absent { background: var(--danger-bg); color: var(--danger); }
+
+  /* VIOLATION TYPE TAGS */
+  .vtype { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: var(--danger-bg); color: var(--danger); }
+
+  /* MODAL */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: none; place-items: center; padding: 20px; backdrop-filter: blur(3px); }
+  .modal-overlay.open { display: grid; }
+  .modal { background: var(--surface); border-radius: 14px; box-shadow: var(--shadow-lg); width: 100%; max-width: 500px; animation: modalIn 0.2s ease; }
+  .modal-lg { max-width: 700px; }
+  @keyframes modalIn { from{opacity:0;transform:scale(0.96);}to{opacity:1;} }
+  .modal-header { padding: 18px 22px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .modal-title { font-family: 'DM Serif Display', serif; font-size: 18px; color: var(--accent); }
+  .modal-body { padding: 20px 22px; }
+  .modal-footer { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+  .close-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); padding: 2px 4px; border-radius: 4px; }
+  .close-btn:hover { color: var(--text); background: var(--surface2); }
+
+  /* FORM */
+  .form-group { margin-bottom: 14px; }
+  label.form-label { display: block; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+  input, select, textarea { width: 100%; padding: 9px 12px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 13.5px; font-family: inherit; color: var(--text); background: var(--surface); outline: none; transition: border-color 0.15s; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent2); }
+  textarea { resize: vertical; min-height: 80px; }
+
+  /* VIOLATION TYPE GRID */
+  .vtype-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-bottom: 14px; }
+  .vtype-btn { padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 500; text-align: center; transition: all 0.15s; background: var(--surface); }
+  .vtype-btn:hover { border-color: var(--danger); color: var(--danger); }
+  .vtype-btn.selected { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); font-weight: 700; }
+
+  /* SNAPSHOT */
+  .snapshot-preview { width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid var(--border); max-height: 200px; object-fit: cover; }
+
+  /* EMPTY */
+  .empty { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+  .empty-icon { font-size: 36px; margin-bottom: 10px; opacity: 0.5; }
+  .empty h3 { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 5px; }
+
+  /* TOAST */
+  #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 999; display: flex; flex-direction: column; gap: 7px; }
+  .toast { padding: 11px 16px; border-radius: 9px; font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg); display: flex; align-items: center; gap: 8px; animation: toastIn 0.25s ease; min-width: 240px; }
+  @keyframes toastIn { from{opacity:0;transform:translateX(20px);}to{opacity:1;} }
+  .toast-success { background: var(--success); color: white; }
+  .toast-error { background: var(--danger); color: white; }
+  .toast-info { background: var(--accent2); color: white; }
+  .toast-warning { background: var(--gold); color: white; }
+
+  /* LOADER */
+  .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.8); z-index: 500; display: none; place-items: center; }
+  .loading-overlay.show { display: grid; }
+  .big-spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent2); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 10px; }
+  @keyframes spin { to{transform:rotate(360deg);} }
+
+  .section-sep { height: 1px; background: var(--border); margin: 14px 0; }
+  .flex { display: flex; align-items: center; gap: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: var(--surface2); color: var(--text-muted); }
+  .chip-green { background: var(--success-bg); color: var(--success); }
+  .chip-blue { background: var(--info-bg); color: var(--info); }
+  .chip-red { background: var(--danger-bg); color: var(--danger); }
+
+  /* PROGRESS */
+  .prog-wrap { background: var(--surface2); border-radius: 20px; height: 6px; overflow: hidden; margin-top: 6px; }
+  .prog-bar { height: 100%; border-radius: 20px; background: var(--success); transition: width 0.5s; }
+
+  /* AUTO REFRESH indicator */
+  .refresh-indicator { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+  .refresh-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <div class="logo-icon">🛡</div>
+    <h1>ProctorGuard <span>/ Proctor</span></h1>
+  </div>
+  <div class="topbar-right">
+    <div class="refresh-indicator" id="refreshIndicator" style="display:none">
+      <div class="refresh-dot"></div>
+      <span>Live</span>
+    </div>
+    <div class="flex">
+      <div class="avatar" id="userAvatar">P</div>
+      <span style="font-size:13px" id="userNameDisplay">Proctor</span>
+    </div>
+    <button class="btn-logout" onclick="logout()">Sign Out</button>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <!-- Room selector -->
+    <div class="room-selector">
+      <label>My Room</label>
+      <select id="roomSelect" onchange="onRoomChange()">
+        <option value="">Select room...</option>
+      </select>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Navigation</div>
+      <button class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard"><span class="icon">🏠</span>Dashboard</button>
+      <button class="nav-item" onclick="showPage('monitor')" id="nav-monitor">
+        <span class="icon">👁</span>Monitor Room
+        <span class="nav-badge" id="violationBadge" style="display:none">0</span>
+      </button>
+      <button class="nav-item" onclick="showPage('violations')" id="nav-violations"><span class="icon">⚠️</span>Violations</button>
+      <button class="nav-item" onclick="showPage('video')" id="nav-video"><span class="icon">📹</span>Video Feeds</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Proctor Dashboard</div>
+          <div class="page-subtitle" id="dashSubtitle">Select a room to begin monitoring</div>
+        </div>
+        <button class="btn btn-secondary" onclick="loadAll()">🔄 Refresh</button>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-icon" style="background:var(--surface2)">🪑</div><div><div class="stat-val" id="statTotal">—</div><div class="stat-lbl">Total Seats</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:var(--success-bg)">▶️</div><div><div class="stat-val" id="statActive">—</div><div class="stat-lbl">In Progress</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:var(--info-bg)">✅</div><div><div class="stat-val" id="statSubmitted">—</div><div class="stat-lbl">Submitted</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:var(--danger-bg)">⚠️</div><div><div class="stat-val" id="statViolations">—</div><div class="stat-lbl">Violations</div></div></div>
+      </div>
+
+      <!-- Exam info card -->
+      <div class="card" style="margin-bottom:16px" id="examInfoCard" style="display:none">
+        <div class="card-body" id="examInfoBody">
+          <div class="empty"><div class="empty-icon">🏫</div><p>Select a room from the sidebar to see exam details</p></div>
+        </div>
+      </div>
+
+      <!-- Progress -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Room Progress</span>
+          <div class="refresh-indicator" id="dashRefresh" style="display:none">
+            <div class="refresh-dot"></div><span style="font-size:11px;color:var(--text-muted)">Auto-refreshing</span>
+          </div>
+        </div>
+        <div class="card-body" id="dashProgress">
+          <div class="empty"><div class="empty-icon">🏫</div><p>Select a room to see student progress</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MONITOR ROOM -->
+    <div class="page" id="page-monitor">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Room Monitor</div>
+          <div class="page-subtitle" id="monitorSubtitle">Select a room to begin</div>
+        </div>
+        <div class="flex">
+          <select id="monitorFilter" onchange="renderMonitor()" style="width:150px">
+            <option value="">All Students</option>
+            <option value="not_started">Not Started</option>
+            <option value="in_progress">In Progress</option>
+            <option value="submitted">Submitted</option>
+            <option value="absent">Absent</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" onclick="loadSeats()">🔄</button>
+        </div>
+      </div>
+      <div class="student-grid" id="studentGrid">
+        <div class="empty" style="grid-column:1/-1"><div class="empty-icon">🏫</div><p>Select a room to see students</p></div>
+      </div>
+    </div>
+
+    <!-- VIOLATIONS -->
+    <div class="page" id="page-violations">
+      <div class="page-header">
+        <div><div class="page-title">Violations Log</div><div class="page-subtitle" id="violationsSubtitle">All recorded violations</div></div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Student</th><th>Seat</th><th>Violation Type</th><th>Description</th><th>Snapshot</th></tr></thead>
+            <tbody id="violationsTable"><tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-muted)">No violations logged</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIDEO FEEDS -->
+    <div class="page" id="page-video">
+      <div class="page-header">
+        <div><div class="page-title">Video Feeds</div><div class="page-subtitle">Live webcam feeds from students (requires student permission)</div></div>
+        <button class="btn btn-secondary btn-sm" onclick="refreshVideoFeeds()">🔄 Refresh</button>
+      </div>
+      <div class="video-grid" id="videoGrid">
+        <div class="empty" style="grid-column:1/-1"><div class="empty-icon">📹</div><h3>No active feeds</h3><p>Video feeds appear here when students enable camera access</p></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ═══ MODALS ═══ -->
+
+<!-- Log Violation Modal -->
+<div class="modal-overlay" id="violationModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Log Violation</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="violationStudentName">Student</div>
+      </div>
+      <button class="close-btn" onclick="closeModal('violationModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Violation Type *</label>
+        <div class="vtype-grid">
+          <div class="vtype-btn" onclick="selectVType(this,'phone_use')">📱 Phone Use</div>
+          <div class="vtype-btn" onclick="selectVType(this,'talking')">🗣 Talking</div>
+          <div class="vtype-btn" onclick="selectVType(this,'copying')">📋 Copying</div>
+          <div class="vtype-btn" onclick="selectVType(this,'tab_switch')">🖥 Tab Switch</div>
+          <div class="vtype-btn" onclick="selectVType(this,'unauthorized_material')">📚 Unauth. Material</div>
+          <div class="vtype-btn" onclick="selectVType(this,'other')">⚠️ Other</div>
+        </div>
+        <input type="hidden" id="selectedVType">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea id="violationDesc" placeholder="Describe what was observed..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Snapshot (optional)</label>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="takeSnapshot()" id="snapshotBtn">📷 Take Snapshot</button>
+          <span style="font-size:12px;color:var(--text-muted);align-self:center" id="snapshotStatus"></span>
+        </div>
+        <canvas id="snapshotCanvas" style="display:none"></canvas>
+        <img id="snapshotPreview" class="snapshot-preview" style="display:none">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('violationModal')">Cancel</button>
+      <button class="btn btn-danger" onclick="submitViolation()">⚠️ Log Violation</button>
+    </div>
+  </div>
+</div>
+
+<!-- Force Submit Modal -->
+<div class="modal-overlay" id="forceSubmitModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" style="color:var(--danger)">⚠️ Force Submit</div>
+      <button class="close-btn" onclick="closeModal('forceSubmitModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-muted);line-height:1.7" id="forceSubmitMsg">
+        Are you sure you want to force-submit this student's exam?
+        Their current answers will be saved and the exam will be marked as submitted.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('forceSubmitModal')">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmForceSubmit()">Force Submit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Student Detail Modal -->
+<div class="modal-overlay" id="studentModal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title" id="studentModalTitle">Student Details</div>
+      <button class="close-btn" onclick="closeModal('studentModal')">✕</button>
+    </div>
+    <div class="modal-body" id="studentModalBody"></div>
+    <div class="modal-footer" id="studentModalFooter"></div>
+  </div>
+</div>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div><div class="big-spinner"></div><div style="font-size:13px;color:var(--text-muted)" id="loadingMsg">Loading...</div></div>
+</div>
+<div id="toast-container"></div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════
+const STATE = {
+  user: null, token: null,
+  rooms: [],
+  currentRoom: null,
+  seats: [],
+  violations: [],
+  selectedSeat: null,   // for violation/force submit
+  snapshotDataUrl: null,
+  refreshInterval: null,
+  videoStreams: {},      // { student_id: MediaStream }
+};
+
+const VIOLATION_LABELS = {
+  phone_use: '📱 Phone Use',
+  talking: '🗣 Talking',
+  copying: '📋 Copying',
+  tab_switch: '🖥 Tab Switch',
+  unauthorized_material: '📚 Unauth. Material',
+  other: '⚠️ Other',
+};
+
+// ═══════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+  const token = localStorage.getItem('pg_token');
+  const user  = JSON.parse(localStorage.getItem('pg_user') || 'null');
+  if (!token || !user) { window.location.href = '/'; return; }
+
+  const roles = user.roles || [user.role];
+  if (!roles.includes('proctor')) { window.location.href = '/'; return; }
+
+  STATE.token = token;
+  STATE.user  = user;
+
+  document.getElementById('userNameDisplay').textContent = user.name || user.email;
+  document.getElementById('userAvatar').textContent = (user.name || 'P')[0].toUpperCase();
+
+  await loadAll();
+});
+
+// ═══════════════════════════════════════════════════
+//  API
+// ═══════════════════════════════════════════════════
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${STATE.token}` } };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(path, opts);
+  if (res.status === 401) { logout(); return null; }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || 'Request failed');
+  return data;
+}
+
+// ═══════════════════════════════════════════════════
+//  LOAD
+// ═══════════════════════════════════════════════════
+async function loadAll() {
+  showLoader('Loading...');
+  try {
+    await loadRooms();
+    if (STATE.currentRoom) {
+      await Promise.all([loadSeats(), loadViolations()]);
+    }
+    renderDashboard();
+  } catch(e) { toast('Failed to load data', 'error'); }
+  hideLoader();
+}
+
+async function loadRooms() {
+  try {
+    const data = await api('GET', '/api/proctor/rooms');
+    STATE.rooms = Array.isArray(data) ? data : [];
+    populateRoomSelector();
+  } catch(e) { STATE.rooms = []; }
+}
+
+async function loadSeats() {
+  if (!STATE.currentRoom) return;
+  try {
+    const data = await api('GET', `/api/proctor/rooms/${STATE.currentRoom.id}/seats`);
+    STATE.seats = Array.isArray(data) ? data : [];
+  } catch(e) { STATE.seats = []; }
+}
+
+async function loadViolations() {
+  if (!STATE.currentRoom) return;
+  try {
+    const data = await api('GET', `/api/proctor/rooms/${STATE.currentRoom.id}/violations`);
+    STATE.violations = Array.isArray(data) ? data : [];
+    updateViolationBadge();
+  } catch(e) { STATE.violations = []; }
+}
+
+// ═══════════════════════════════════════════════════
+//  ROOM SELECTOR
+// ═══════════════════════════════════════════════════
+function populateRoomSelector() {
+  const sel = document.getElementById('roomSelect');
+  if (!STATE.rooms.length) {
+    sel.innerHTML = '<option value="">No rooms assigned</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">Select room...</option>' +
+    STATE.rooms.map(r => `<option value="${r.id}">${esc(r.name || r.room_number || 'Room '+r.id)} — ${esc(r.exam_title||'')}</option>`).join('');
+
+  // Auto-select if only one room
+  if (STATE.rooms.length === 1) {
+    sel.value = STATE.rooms[0].id;
+    onRoomChange();
+  }
+}
+
+async function onRoomChange() {
+  const roomId = document.getElementById('roomSelect').value;
+  STATE.currentRoom = STATE.rooms.find(r => r.id == roomId) || null;
+
+  if (!STATE.currentRoom) {
+    stopAutoRefresh();
+    STATE.seats = [];
+    STATE.violations = [];
+    renderDashboard();
+    return;
+  }
+
+  showLoader('Loading room...');
+  await Promise.all([loadSeats(), loadViolations()]);
+  hideLoader();
+  renderDashboard();
+  startAutoRefresh();
+
+  document.getElementById('refreshIndicator').style.display = 'flex';
+  document.getElementById('dashRefresh').style.display = 'flex';
+}
+
+// ═══════════════════════════════════════════════════
+//  AUTO REFRESH
+// ═══════════════════════════════════════════════════
+function startAutoRefresh() {
+  stopAutoRefresh();
+  STATE.refreshInterval = setInterval(async () => {
+    if (!STATE.currentRoom) return;
+    await Promise.all([loadSeats(), loadViolations()]);
+    // Silently update current page
+    const activePage = document.querySelector('.page.active')?.id?.replace('page-', '');
+    if (activePage === 'dashboard') renderDashboard();
+    else if (activePage === 'monitor') renderMonitor();
+    else if (activePage === 'violations') renderViolations();
+  }, 15000); // refresh every 15 seconds
+}
+
+function stopAutoRefresh() {
+  clearInterval(STATE.refreshInterval);
+}
+
+// ═══════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════
+function showPage(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + pageId)?.classList.add('active');
+  document.getElementById('nav-' + pageId)?.classList.add('active');
+  if (pageId === 'dashboard') renderDashboard();
+  else if (pageId === 'monitor') renderMonitor();
+  else if (pageId === 'violations') renderViolations();
+  else if (pageId === 'video') renderVideoFeeds();
+}
+
+// ═══════════════════════════════════════════════════
+//  DASHBOARD
+// ═══════════════════════════════════════════════════
+function renderDashboard() {
+  const seats = STATE.seats;
+  const total      = seats.length;
+  const active     = seats.filter(s => s.status === 'in_progress').length;
+  const submitted  = seats.filter(s => s.status === 'submitted').length;
+  const absent     = seats.filter(s => s.status === 'absent' || (!s.started_at && !s.submitted_at)).length;
+  const violations = STATE.violations.length;
+
+  document.getElementById('statTotal').textContent     = total || '—';
+  document.getElementById('statActive').textContent    = active || '0';
+  document.getElementById('statSubmitted').textContent = submitted || '0';
+  document.getElementById('statViolations').textContent= violations || '0';
+
+  // Exam info
+  const room = STATE.currentRoom;
+  const examEl = document.getElementById('examInfoBody');
+  if (room) {
+    document.getElementById('dashSubtitle').textContent = `Monitoring: ${room.name || room.room_number || 'Room'} · ${room.exam_title || ''}`;
+    examEl.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Exam</div>
+          <div style="font-size:14px;font-weight:600;margin-top:3px">${esc(room.exam_title||'—')}</div></div>
+        <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Room</div>
+          <div style="font-size:14px;font-weight:600;margin-top:3px">${esc(room.name||room.room_number||'—')}</div></div>
+        <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Capacity</div>
+          <div style="font-size:14px;font-weight:600;margin-top:3px">${room.capacity||'—'}</div></div>
+      </div>`;
+  } else {
+    examEl.innerHTML = `<div class="empty"><div class="empty-icon">🏫</div><p>Select a room to see details</p></div>`;
+  }
+
+  // Progress
+  const progressEl = document.getElementById('dashProgress');
+  if (!seats.length) {
+    progressEl.innerHTML = `<div class="empty"><div class="empty-icon">🪑</div><p>${room ? 'No students assigned to this room' : 'Select a room to see progress'}</p></div>`;
+    return;
+  }
+
+  const pct = total > 0 ? Math.round((submitted / total) * 100) : 0;
+  progressEl.innerHTML = `
+    <div style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+        <span style="color:var(--text-muted)">Submission progress</span>
+        <span style="font-weight:600">${submitted}/${total} (${pct}%)</span>
+      </div>
+      <div class="prog-wrap"><div class="prog-bar" style="width:${pct}%"></div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center">
+      <div style="padding:10px;background:var(--surface2);border-radius:8px">
+        <div style="font-size:18px;font-weight:700;color:var(--text-muted)">${seats.filter(s=>s.status==='not_started'||(!s.started_at&&!s.submitted_at)).length}</div>
+        <div style="font-size:11px;color:var(--text-muted)">Not Started</div>
+      </div>
+      <div style="padding:10px;background:var(--success-bg);border-radius:8px">
+        <div style="font-size:18px;font-weight:700;color:var(--success)">${active}</div>
+        <div style="font-size:11px;color:var(--success)">In Progress</div>
+      </div>
+      <div style="padding:10px;background:var(--info-bg);border-radius:8px">
+        <div style="font-size:18px;font-weight:700;color:var(--info)">${submitted}</div>
+        <div style="font-size:11px;color:var(--info)">Submitted</div>
+      </div>
+      <div style="padding:10px;background:var(--danger-bg);border-radius:8px">
+        <div style="font-size:18px;font-weight:700;color:var(--danger)">${violations}</div>
+        <div style="font-size:11px;color:var(--danger)">Violations</div>
+      </div>
+    </div>
+    ${violations > 0 ? `
+    <div style="margin-top:14px;padding:12px;background:var(--danger-bg);border:1px solid #f0c0c0;border-radius:8px">
+      <div style="font-size:12px;font-weight:700;color:var(--danger);margin-bottom:6px">⚠️ Recent Violations</div>
+      ${STATE.violations.slice(0,3).map(v=>`
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;border-bottom:1px solid rgba(139,26,26,0.1)">
+          <span style="color:var(--danger);font-weight:600">${VIOLATION_LABELS[v.type]||v.type}</span>
+          <span style="color:var(--text-muted)">— ${esc(v.student_name||'')}</span>
+          <span style="margin-left:auto;color:var(--text-muted)">${timeAgo(v.created_at)}</span>
+        </div>`).join('')}
+    </div>` : ''}`;
+}
+
+// ═══════════════════════════════════════════════════
+//  MONITOR
+// ═══════════════════════════════════════════════════
+function renderMonitor() {
+  const filter = document.getElementById('monitorFilter').value;
+  let seats = STATE.seats;
+  if (filter) seats = seats.filter(s => {
+    const status = getSeatStatus(s);
+    return status === filter;
+  });
+
+  document.getElementById('monitorSubtitle').textContent =
+    STATE.currentRoom ? `${STATE.currentRoom.name||'Room'} · ${seats.length} student${seats.length!==1?'s':''}` : 'Select a room';
+
+  const grid = document.getElementById('studentGrid');
+  if (!STATE.currentRoom) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🏫</div><p>Select a room first</p></div>`;
+    return;
+  }
+  if (!seats.length) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🪑</div><h3>No students</h3><p>${filter ? 'No students with this status' : 'No students assigned to this room'}</p></div>`;
+    return;
+  }
+
+  grid.innerHTML = seats.map(s => {
+    const status = getSeatStatus(s);
+    const vCount = STATE.violations.filter(v => v.seat_id === s.id).length;
+    return `
+      <div class="student-card status-${status} ${vCount > 0 ? 'has-violation' : ''}" onclick="openStudentDetail(${s.id})">
+        ${vCount > 0 ? `<div class="violation-count">${vCount}</div>` : ''}
+        <div class="student-name">${esc(s.student_name||'—')}</div>
+        <div class="student-roll">${esc(s.roll_number||s.seat_number||'—')}</div>
+        <div class="student-status">
+          <div class="status-dot dot-${status}"></div>
+          <span style="color:var(--text-muted)">${statusLabel(status)}</span>
+        </div>
+        ${s.started_at ? `<div style="font-size:10px;color:var(--text-muted);margin-top:4px">Started ${timeAgo(s.started_at)}</div>` : ''}
+        ${s.submitted_at ? `<div style="font-size:10px;color:var(--info);margin-top:4px">✅ Submitted ${timeAgo(s.submitted_at)}</div>` : ''}
+        <div class="student-actions" onclick="event.stopPropagation()">
+          <button class="btn btn-danger btn-sm" onclick="openViolationModal(${s.id},'${esc(s.student_name||'')}')">⚠️</button>
+          ${status === 'in_progress' ? `<button class="btn btn-warning btn-sm" onclick="openForceSubmit(${s.id},'${esc(s.student_name||'')}')">⏹ Force</button>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function getSeatStatus(seat) {
+  if (seat.status === 'submitted' || seat.submitted_at) return 'submitted';
+  if (seat.status === 'in_progress' || seat.started_at) return 'in_progress';
+  if (seat.status === 'absent') return 'absent';
+  return 'not_started';
+}
+
+function statusLabel(status) {
+  const map = { not_started: 'Not Started', in_progress: 'In Progress', submitted: 'Submitted', absent: 'Absent' };
+  return map[status] || status;
+}
+
+// ═══════════════════════════════════════════════════
+//  STUDENT DETAIL
+// ═══════════════════════════════════════════════════
+function openStudentDetail(seatId) {
+  const seat = STATE.seats.find(s => s.id === seatId);
+  if (!seat) return;
+  const status = getSeatStatus(seat);
+  const seatViolations = STATE.violations.filter(v => v.seat_id === seatId);
+
+  document.getElementById('studentModalTitle').textContent = seat.student_name || 'Student';
+  document.getElementById('studentModalBody').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div style="background:var(--surface2);padding:12px;border-radius:8px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Roll Number</div>
+        <div style="font-size:14px;font-weight:600;margin-top:3px">${esc(seat.roll_number||'—')}</div>
+      </div>
+      <div style="background:var(--surface2);padding:12px;border-radius:8px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Status</div>
+        <div style="margin-top:3px">${statusBadge(status)}</div>
+      </div>
+      <div style="background:var(--surface2);padding:12px;border-radius:8px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Started</div>
+        <div style="font-size:13px;font-weight:500;margin-top:3px">${seat.started_at ? formatDateTime(seat.started_at) : '—'}</div>
+      </div>
+      <div style="background:var(--surface2);padding:12px;border-radius:8px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Submitted</div>
+        <div style="font-size:13px;font-weight:500;margin-top:3px">${seat.submitted_at ? formatDateTime(seat.submitted_at) : '—'}</div>
+      </div>
+    </div>
+    ${seatViolations.length ? `
+      <div style="margin-top:4px">
+        <div style="font-size:12px;font-weight:700;color:var(--danger);margin-bottom:8px">⚠️ Violations (${seatViolations.length})</div>
+        ${seatViolations.map(v=>`
+          <div style="padding:10px;background:var(--danger-bg);border-radius:7px;margin-bottom:6px;font-size:12px">
+            <div style="font-weight:700;color:var(--danger)">${VIOLATION_LABELS[v.type]||v.type}</div>
+            ${v.description?`<div style="color:var(--text-muted);margin-top:3px">${esc(v.description)}</div>`:''}
+            <div style="color:var(--text-muted);font-size:11px;margin-top:3px">${formatDateTime(v.created_at)}</div>
+            ${v.snapshot_url?`<img src="${v.snapshot_url}" style="max-width:100%;border-radius:5px;margin-top:6px">`:''}
+          </div>`).join('')}
+      </div>` : '<div style="color:var(--text-muted);font-size:13px">No violations recorded for this student.</div>'}`;
+
+  document.getElementById('studentModalFooter').innerHTML = `
+    <button class="btn btn-secondary" onclick="closeModal('studentModal')">Close</button>
+    <button class="btn btn-danger btn-sm" onclick="closeModal('studentModal');openViolationModal(${seat.id},'${esc(seat.student_name||'')}')">⚠️ Log Violation</button>
+    ${status === 'in_progress' ? `<button class="btn btn-warning btn-sm" onclick="closeModal('studentModal');openForceSubmit(${seat.id},'${esc(seat.student_name||'')}')">⏹ Force Submit</button>` : ''}`;
+
+  openModal('studentModal');
+}
+
+// ═══════════════════════════════════════════════════
+//  VIOLATIONS
+// ═══════════════════════════════════════════════════
+function renderViolations() {
+  document.getElementById('violationsSubtitle').textContent =
+    STATE.currentRoom ? `${STATE.currentRoom.name||'Room'} · ${STATE.violations.length} violation${STATE.violations.length!==1?'s':''}` : 'All violations';
+
+  const tbody = document.getElementById('violationsTable');
+  if (!STATE.violations.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-muted)">No violations logged</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = STATE.violations.map(v => `
+    <tr>
+      <td style="font-size:12px;white-space:nowrap">${formatDateTime(v.created_at)}</td>
+      <td><strong>${esc(v.student_name||'—')}</strong><div style="font-size:11px;color:var(--text-muted)">${esc(v.roll_number||'')}</div></td>
+      <td style="font-size:12px">${esc(v.seat_number||'—')}</td>
+      <td><span class="vtype">${VIOLATION_LABELS[v.type]||v.type}</span></td>
+      <td style="font-size:12px;color:var(--text-muted);max-width:200px">${esc(v.description||'—')}</td>
+      <td>${v.snapshot_url ? `<a href="${v.snapshot_url}" target="_blank" style="color:var(--accent2);font-size:12px">View</a>` : '—'}</td>
+    </tr>`).join('');
+}
+
+function updateViolationBadge() {
+  const badge = document.getElementById('violationBadge');
+  const count = STATE.violations.length;
+  badge.textContent = count;
+  badge.style.display = count > 0 ? '' : 'none';
+}
+
+// ═══════════════════════════════════════════════════
+//  LOG VIOLATION
+// ═══════════════════════════════════════════════════
+function openViolationModal(seatId, studentName) {
+  STATE.selectedSeat = seatId;
+  STATE.snapshotDataUrl = null;
+  document.getElementById('violationStudentName').textContent = studentName;
+  document.getElementById('selectedVType').value = '';
+  document.getElementById('violationDesc').value = '';
+  document.getElementById('snapshotPreview').style.display = 'none';
+  document.getElementById('snapshotStatus').textContent = '';
+  document.querySelectorAll('.vtype-btn').forEach(b => b.classList.remove('selected'));
+  openModal('violationModal');
+}
+
+function selectVType(btn, type) {
+  document.querySelectorAll('.vtype-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('selectedVType').value = type;
+}
+
+async function takeSnapshot() {
+  try {
+    // Try to get a snapshot from the student's video stream if available
+    const stream = STATE.videoStreams[STATE.selectedSeat];
+    if (stream) {
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      await video.play();
+      const canvas = document.getElementById('snapshotCanvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      STATE.snapshotDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      document.getElementById('snapshotPreview').src = STATE.snapshotDataUrl;
+      document.getElementById('snapshotPreview').style.display = '';
+      document.getElementById('snapshotStatus').textContent = '✅ Snapshot taken';
+    } else {
+      document.getElementById('snapshotStatus').textContent = 'No live feed available for this student';
+    }
+  } catch(e) {
+    document.getElementById('snapshotStatus').textContent = 'Could not take snapshot';
+  }
+}
+
+async function submitViolation() {
+  const type = document.getElementById('selectedVType').value;
+  const desc = document.getElementById('violationDesc').value.trim();
+  if (!type) { toast('Select a violation type', 'error'); return; }
+
+  showLoader('Logging violation...');
+  try {
+    await api('POST', '/api/proctor/violations', {
+      seat_id: STATE.selectedSeat,
+      type,
+      description: desc || null,
+      snapshot_url: STATE.snapshotDataUrl || null,
+    });
+    closeModal('violationModal');
+    await loadViolations();
+    renderMonitor();
+    updateViolationBadge();
+    toast('⚠️ Violation logged', 'warning');
+  } catch(e) { toast(e.message, 'error'); }
+  hideLoader();
+}
+
+// ═══════════════════════════════════════════════════
+//  FORCE SUBMIT
+// ═══════════════════════════════════════════════════
+function openForceSubmit(seatId, studentName) {
+  STATE.selectedSeat = seatId;
+  document.getElementById('forceSubmitMsg').innerHTML = `
+    Are you sure you want to force-submit <strong>${esc(studentName)}</strong>'s exam?
+    <br><br>Their current answers will be saved and the exam will be marked as submitted. This cannot be undone.`;
+  openModal('forceSubmitModal');
+}
+
+async function confirmForceSubmit() {
+  showLoader('Force submitting...');
+  try {
+    await api('POST', '/api/proctor/force-submit', { seat_id: STATE.selectedSeat });
+    closeModal('forceSubmitModal');
+    await loadSeats();
+    renderMonitor();
+    renderDashboard();
+    toast('Exam force-submitted', 'info');
+  } catch(e) { toast(e.message, 'error'); }
+  hideLoader();
+}
+
+// ═══════════════════════════════════════════════════
+//  VIDEO FEEDS
+// ═══════════════════════════════════════════════════
+function renderVideoFeeds() {
+  const grid = document.getElementById('videoGrid');
+  const activeSeats = STATE.seats.filter(s => getSeatStatus(s) === 'in_progress');
+
+  if (!activeSeats.length) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><div class="empty-icon">📹</div><h3>No active feeds</h3><p>Video feeds appear here when students are in progress and have enabled camera access</p></div>`;
+    return;
+  }
+
+  grid.innerHTML = activeSeats.map(s => {
+    const hasStream = !!STATE.videoStreams[s.id];
+    return `<div class="video-card ${hasStream ? '' : 'no-feed'}" id="videoCard_${s.id}">
+      ${hasStream ? `
+        <video id="video_${s.id}" autoplay muted></video>
+        <div class="video-label">${esc(s.student_name||'Student')}</div>
+        <div class="video-status"><span class="live-badge">LIVE</span></div>
+      ` : `
+        <div class="no-feed-msg">
+          <div style="font-size:28px;margin-bottom:6px">📹</div>
+          <div style="font-weight:600">${esc(s.student_name||'Student')}</div>
+          <div style="font-size:11px;margin-top:4px">No feed available</div>
+        </div>
+      `}
+    </div>`;
+  }).join('');
+}
+
+function refreshVideoFeeds() {
+  renderVideoFeeds();
+  toast('Video feeds refreshed', 'info');
+}
+
+// ═══════════════════════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════════════════════
+function statusBadge(status) {
+  const map = {
+    not_started: ['not_started','⬜ Not Started'],
+    in_progress: ['in_progress','🟢 In Progress'],
+    submitted: ['submitted','✅ Submitted'],
+    absent: ['absent','❌ Absent'],
+  };
+  const [cls, label] = map[status] || ['not_started', status];
+  return `<span class="badge badge-${cls}">${label}</span>`;
+}
+
+function esc(s) { if(!s)return''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function timeAgo(d) { if(!d)return'—'; const diff=Date.now()-new Date(d).getTime(); const m=Math.floor(diff/60000); if(m<1)return'just now'; if(m<60)return m+'m ago'; const h=Math.floor(m/60); if(h<24)return h+'h ago'; return Math.floor(h/24)+'d ago'; }
+function formatDateTime(d) { if(!d)return'—'; return new Date(d).toLocaleString('en-IN',{dateStyle:'short',timeStyle:'short'}); }
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function showLoader(msg) { document.getElementById('loadingMsg').textContent=msg||'Loading...'; document.getElementById('loadingOverlay').classList.add('show'); }
+function hideLoader() { document.getElementById('loadingOverlay').classList.remove('show'); }
+function toast(msg,type='info') { const el=document.createElement('div'); el.className=`toast toast-${type}`; el.innerHTML=`<span>${type==='success'?'✓':type==='error'?'✕':type==='warning'?'⚠':'ℹ'}</span> ${esc(msg)}`; document.getElementById('toast-container').appendChild(el); setTimeout(()=>el.remove(),4000); }
+function logout() { stopAutoRefresh(); localStorage.removeItem('pg_token'); localStorage.removeItem('pg_user'); window.location.href='/'; }
+
+document.querySelectorAll('.modal-overlay').forEach(o=>{o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');});});
+</script>
+</body>
+</html>
