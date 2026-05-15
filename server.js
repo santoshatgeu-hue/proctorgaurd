@@ -665,6 +665,7 @@ app.post('/api/exams/:id/rooms', auth(['admin']), async (req, res) => {
 app.delete('/api/exams/rooms/:id', auth(['admin']), async (req, res) => {
   try {
     await pool.query('DELETE FROM answers WHERE seat_id IN (SELECT id FROM exam_seats WHERE room_id=$1)', [req.params.id]);
+    await pool.query('DELETE FROM violations WHERE seat_id IN (SELECT id FROM exam_seats WHERE room_id=$1)', [req.params.id]);
     await pool.query('DELETE FROM exam_seats WHERE room_id=$1', [req.params.id]);
     await pool.query('DELETE FROM exam_rooms WHERE id=$1', [req.params.id]);
     res.json({ deleted: true });
