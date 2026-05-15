@@ -559,7 +559,7 @@ app.delete('/api/exams/:id', auth(['admin']), async (req, res) => {
   try {
     // Cascade: delete answers → seats → rooms → exam
     await pool.query(`DELETE FROM answers WHERE seat_id IN (SELECT id FROM exam_seats WHERE exam_id=$1)`, [id]);
-    await pool.query(`DELETE FROM violations WHERE exam_id=$1`, [id]);
+    await pool.query(`DELETE FROM violations WHERE seat_id IN (SELECT id FROM exam_seats WHERE exam_id=$1)`, [id]);
     await pool.query(`DELETE FROM results WHERE exam_id=$1`, [id]);
     await pool.query(`DELETE FROM exam_seats WHERE exam_id=$1`, [id]);
     await pool.query(`DELETE FROM exam_rooms WHERE exam_id=$1`, [id]);
