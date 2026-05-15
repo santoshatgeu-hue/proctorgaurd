@@ -131,6 +131,7 @@
     <div class="nav-item" onclick="showSection('users')"><span class="nav-icon">👥</span>Users</div>
     <div class="nav-item" onclick="showSection('bulk')"><span class="nav-icon">📤</span>Bulk Upload</div>
     <div class="nav-item" onclick="showSection('bulk-subjects')"><span class="nav-icon">📚</span>Bulk Subjects</div>
+    <div class="nav-item" onclick="showSection('bulk-exams')"><span class="nav-icon">📋</span>Bulk Exams</div>
     <div class="nav-item" onclick="showSection('subjects')"><span class="nav-icon">🗂️</span>Subjects</div>
     <div class="nav-item" onclick="showSection('exams')"><span class="nav-icon">📋</span>Exams</div>
     <div class="nav-item" onclick="showSection('results')"><span class="nav-icon">📈</span>Results</div>
@@ -271,6 +272,33 @@
             <tbody id="subjects-tbody"></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- BULK EXAMS -->
+    <div class="section" id="section-bulk-exams">
+      <div class="card">
+        <div class="card-title">Bulk Upload Exams</div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:20px">
+          Upload an Excel file with a <strong>Exams</strong> sheet. Required columns:
+          <strong>title, subject_code, paper_title, scheduled_at, ends_at</strong>.
+          Dates format: <strong>DD/MM/YYYY HH:MM</strong> (e.g. 20/05/2026 10:00)
+        </p>
+        <div class="upload-zone" id="bulk-exams-zone"
+             onclick="document.getElementById('bulk-exams-file').click()"
+             ondragover="event.preventDefault();this.classList.add('over')"
+             ondragleave="this.classList.remove('over')"
+             ondrop="handleBulkExamsDrop(event)">
+          <input type="file" id="bulk-exams-file" accept=".xlsx,.xls" style="display:none" onchange="onBulkExamsFileSelected(this)">
+          <div class="icon">📋</div>
+          <div style="font-size:14px;font-weight:500" id="bulk-exams-filename">Click or drag .xlsx file here</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">Supports .xlsx and .xls files</div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+          <button class="btn btn-primary" id="bulk-exams-btn" disabled onclick="doBulkExamsUpload()">Upload & Process</button>
+          <a href="/exams_bulk_template.xlsx" download class="btn btn-secondary" style="text-decoration:none">📥 Exams Template</a>
+        </div>
+        <div id="bulk-exams-result" style="display:none;margin-top:20px"></div>
       </div>
     </div>
 
@@ -420,7 +448,7 @@ function logout() { localStorage.clear(); window.location.href = '/login'; }
 const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
 
 // ── NAVIGATION ──────────────────────────────────────────────
-const sectionTitles = { dashboard:'Dashboard', users:'Users', bulk:'Bulk Upload', 'bulk-subjects':'Bulk Subjects', subjects:'Subjects', exams:'Exams', results:'Results' };
+const sectionTitles = { dashboard:'Dashboard', users:'Users', bulk:'Bulk Upload', 'bulk-subjects':'Bulk Subjects', 'bulk-exams':'Bulk Exams', subjects:'Subjects', exams:'Exams', results:'Results' };
 
 function showSection(name) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -591,7 +619,6 @@ async function loadExams() {
       <td>${e.student_count}</td>
       <td>
         <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px" onclick="manageExam(${e.id})">Manage</button>
-        <button onclick="deleteExam(${e.id}, '${(e.title||'').replace(/'/g,String.fromCharCode(39))}')" style="font-size:11px;padding:4px 10px;margin-left:4px;border-radius:5px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:var(--danger);cursor:pointer">🗑 Delete</button>
       </td>
     </tr>`).join('');
 
@@ -831,20 +858,76 @@ async function deleteSubject(id, code, name) {
   } catch(e) { alert('Delete failed: ' + e.message); }
 }
 
-// ── DELETE EXAM ──────────────────────────────────────────────
-async function deleteExam(id, title) {
-  if (!confirm(`⚠️ Delete exam "${title}"?\n\nThis will also delete all rooms, seat assignments and results for this exam. This cannot be undone.`)) return;
+// ── BULK EXAMS ───────────────────────────────────────────────
+let bulkExamsFile = null;
+
+function onBulkExamsFileSelected(input) {
+  bulkExamsFile = input.files[0];
+  if (bulkExamsFile) {
+    document.getElementById('bulk-exams-filename').textContent = bulkExamsFile.name;
+    document.getElementById('bulk-exams-btn').disabled = false;
+  }
+}
+
+function handleBulkExamsDrop(e) {
+  e.preventDefault();
+  document.getElementById('bulk-exams-zone').classList.remove('over');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    bulkExamsFile = file;
+    document.getElementById('bulk-exams-filename').textContent = file.name;
+    document.getElementById('bulk-exams-btn').disabled = false;
+  }
+}
+
+async function doBulkExamsUpload() {
+  if (!bulkExamsFile) return;
+  const btn = document.getElementById('bulk-exams-btn');
+  btn.disabled = true; btn.textContent = 'Uploading...';
+  const fd = new FormData();
+  fd.append('file', bulkExamsFile);
   try {
-    const res = await fetch(`/api/exams/${id}`, { method: 'DELETE', headers });
-    if (res.ok) {
-      loadExams();
-      loadDashboard();
-      showToast(`✅ Exam "${title}" deleted`);
+    const res = await fetch('/api/exams/bulk', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: fd,
+    });
+    const data = await res.json();
+    const resultEl = document.getElementById('bulk-exams-result');
+    resultEl.style.display = 'block';
+    if (!data.success) {
+      resultEl.innerHTML = `<div style="color:var(--danger)">Error: ${data.error || 'Upload failed'}</div>`;
     } else {
-      const data = await res.json();
-      alert(data.error || 'Delete failed');
+      const { created, skipped, errors } = data.summary;
+      resultEl.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px">
+          <div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:14px;text-align:center">
+            <div style="font-size:24px;font-weight:700;color:var(--success)">${created}</div>
+            <div style="font-size:12px;color:var(--success)">Exams Created</div>
+          </div>
+          <div style="background:rgba(79,140,255,0.1);border:1px solid rgba(79,140,255,0.3);border-radius:8px;padding:14px;text-align:center">
+            <div style="font-size:24px;font-weight:700;color:var(--accent)">${skipped}</div>
+            <div style="font-size:12px;color:var(--muted)">Skipped</div>
+          </div>
+          <div style="background:${errors>0?'rgba(239,68,68,0.1)':'rgba(255,255,255,0.05)'};border:1px solid ${errors>0?'rgba(239,68,68,0.3)':'rgba(255,255,255,0.1)'};border-radius:8px;padding:14px;text-align:center">
+            <div style="font-size:24px;font-weight:700;color:${errors>0?'var(--danger)':'var(--muted)'}">${errors}</div>
+            <div style="font-size:12px;color:var(--muted)">Errors</div>
+          </div>
+        </div>
+        ${data.errors?.length ? `<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:12px">
+          <strong style="color:var(--danger)">Errors:</strong>
+          <ul style="margin:8px 0 0 16px;font-size:12px;color:var(--danger)">${data.errors.map(e=>`<li>${e}</li>`).join('')}</ul>
+        </div>` : ''}
+        ${data.created_exams?.length ? `<div style="margin-top:10px;font-size:12px;color:var(--muted)">
+          <strong style="color:var(--text)">Created:</strong> ${data.created_exams.map(e=>`${e.title}`).join(', ')}
+        </div>` : ''}`;
+      if (created > 0) loadExams();
     }
-  } catch(e) { alert('Delete failed: ' + e.message); }
+  } catch(e) {
+    document.getElementById('bulk-exams-result').style.display = 'block';
+    document.getElementById('bulk-exams-result').innerHTML = `<div style="color:var(--danger)">Upload failed: ${e.message}</div>`;
+  }
+  btn.disabled = false; btn.textContent = 'Upload & Process';
 }
 
 // ── TOAST ────────────────────────────────────────────────────
