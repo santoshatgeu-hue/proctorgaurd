@@ -157,26 +157,30 @@ app.post('/api/admin/bulk-upload', auth(['admin']), upload.single('file'), async
         try {
           const hash = await bcrypt.hash(pass, 10);
           const { rows: inserted } = await pool.query(
-            `INSERT INTO users (name, email, password_hash, role, roll_number, department)
-             VALUES ($1, $2, $3, $4, $5, $6)
-             ON CONFLICT (email) DO UPDATE SET name=$1, role=$4
+            `INSERT INTO users (name, email, password_hash, role, roles, roll_number, department, must_change_password)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, false)
+             ON CONFLICT (email) DO UPDATE SET
+               name=$1,
+               role=$4,
+               roles=(SELECT ARRAY(SELECT DISTINCT unnest FROM unnest(users.roles || $5))),
+               must_change_password=false
              RETURNING id, name, email, role`,
-            [name, email, hash, role === 'student' ? 'student' : role === 'faculty' ? 'faculty' : role === 'moderator' ? 'moderator' : 'proctor', roll || null, dept || null]
+            [name, email, hash, role, [role], roll || null, dept || null]
           );
           const userId = inserted[0].id;
 
-          // Link subjects if provided
-          if (subjectCodes && (role === 'student' || role === 'faculty')) {
-            const codes = subjectCodes.split(',').map(s => s.trim()).filter(Boolean);
+          // Link subjects — always use faculty_subjects table for all roles
+          if (subjectCodes) {
+            const codes = subjectCodes.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
             for (const code of codes) {
               const { rows: subj } = await pool.query('SELECT id FROM subjects WHERE code = $1', [code]);
               if (subj[0]) {
-                const table = role === 'student' ? 'student_subjects' : 'faculty_subjects';
-                const col   = role === 'student' ? 'student_id' : 'faculty_id';
                 await pool.query(
-                  `INSERT INTO ${table} (${col}, subject_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+                  `INSERT INTO faculty_subjects (faculty_id, subject_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
                   [userId, subj[0].id]
                 );
+              } else {
+                results.errors.push(`Subject code not found: ${code} (for ${email})`);
               }
             }
           }
@@ -203,12 +207,23 @@ app.post('/api/admin/bulk-upload', auth(['admin']), upload.single('file'), async
 
 // ── USERS (admin) ───────────────────────────────────────────
 app.get('/api/users', auth(['admin']), async (req, res) => {
-  const { role } = req.query;
+  const { role, subject_id } = req.query;
   try {
-    let q = 'SELECT id, name, email, role, roll_number, department, is_active, created_at FROM users';
-    const params = [];
-    if (role) { q += ' WHERE role = $1'; params.push(role); }
-    q += ' ORDER BY name';
+    let q, params = [];
+    if (subject_id) {
+      // Filter students by subject assignment
+      q = `SELECT u.id, u.name, u.email, u.role, u.roll_number, u.department, u.is_active
+           FROM users u
+           JOIN faculty_subjects fs ON fs.faculty_id = u.id
+           WHERE fs.subject_id = $1`;
+      params.push(subject_id);
+      if (role) { q += ' AND u.role = $2'; params.push(role); }
+      q += ' ORDER BY u.name';
+    } else {
+      q = 'SELECT id, name, email, role, roll_number, department, is_active, created_at FROM users';
+      if (role) { q += ' WHERE role = $1'; params.push(role); }
+      q += ' ORDER BY name';
+    }
     const { rows } = await pool.query(q, params);
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -710,6 +725,14 @@ app.post('/api/exams/:id/seats', auth(['admin']), async (req, res) => {
 // GET /api/student/exams — all exams for logged in student
 app.get('/api/student/exams', auth(['student']), async (req, res) => {
   try {
+    // Auto-update exam statuses based on current time
+    await pool.query(`
+      UPDATE exams SET status='active'
+      WHERE status='scheduled' AND scheduled_at <= NOW() AND ends_at >= NOW()`);
+    await pool.query(`
+      UPDATE exams SET status='ended'
+      WHERE status IN ('scheduled','active') AND ends_at < NOW()`);
+
     const { rows } = await pool.query(
       `SELECT e.id as exam_id, e.title, e.scheduled_at, e.ends_at, e.status as exam_status,
        qp.duration_mins, qp.id as paper_id,
@@ -765,9 +788,16 @@ app.post('/api/student/essay-upload', auth(['student']), upload.single('file'), 
 app.get('/api/student/exam', auth(['student']), async (req, res) => {
   try {
     const now = new Date();
+
+    // Auto-activate exams that have reached their scheduled time
+    await pool.query(
+      `UPDATE exams SET status='active'
+       WHERE status='scheduled' AND scheduled_at <= $1 AND ends_at >= $1`, [now]
+    );
+
     const { rows } = await pool.query(
       `SELECT e.id as exam_id, e.title, e.scheduled_at, e.ends_at,
-       qp.duration_mins, qp.instructions, qp.id as paper_id,
+       qp.duration_mins, qp.total_marks, qp.instructions, qp.id as paper_id,
        s.name as subject_name, s.code as subject_code,
        es.id as seat_id, es.room_id, es.status as seat_status
        FROM exam_seats es
@@ -776,26 +806,24 @@ app.get('/api/student/exam', auth(['student']), async (req, res) => {
        JOIN subjects s ON s.id = e.subject_id
        WHERE es.student_id = $1
        AND e.scheduled_at <= $2 AND e.ends_at >= $2
-       AND e.status IN ('scheduled','live')
-       AND es.status IN ('pending','active')
+       AND (es.status IS NULL OR es.status NOT IN ('submitted'))
        LIMIT 1`,
       [req.user.id, now]
     );
     if (!rows[0]) return res.status(404).json({ error: 'No active exam found for you right now' });
 
-    // Get questions (hide correct answers)
+    // Get questions — hide correct answers from student
     const { rows: questions } = await pool.query(
-      `SELECT id, order_index, type, question_text, marks,
+      `SELECT id, type, question_text, marks,
        option_a, option_b, option_c, option_d
        FROM questions WHERE paper_id=$1
-       AND mod_status='approved'
-       ORDER BY order_index`,
+       ORDER BY id`,
       [rows[0].paper_id]
     );
 
-    // Mark seat as active
+    // Mark seat as started
     await pool.query(
-      `UPDATE exam_seats SET status='active', started_at=COALESCE(started_at,NOW()) WHERE id=$1`,
+      `UPDATE exam_seats SET status='in_progress', started_at=COALESCE(started_at,NOW()) WHERE id=$1`,
       [rows[0].seat_id]
     );
 
