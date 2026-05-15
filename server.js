@@ -661,6 +661,29 @@ app.post('/api/exams/:id/rooms', auth(['admin']), async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// DELETE /api/exams/rooms/:id — delete a room and its seats
+app.delete('/api/exams/rooms/:id', auth(['admin']), async (req, res) => {
+  try {
+    await pool.query('DELETE FROM answers WHERE seat_id IN (SELECT id FROM exam_seats WHERE room_id=$1)', [req.params.id]);
+    await pool.query('DELETE FROM exam_seats WHERE room_id=$1', [req.params.id]);
+    await pool.query('DELETE FROM exam_rooms WHERE id=$1', [req.params.id]);
+    res.json({ deleted: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/exams/:id/seats — get seats for an exam, optionally filtered by room
+app.get('/api/exams/:id/seats', auth(['admin']), async (req, res) => {
+  try {
+    const { room_id } = req.query;
+    const q = room_id
+      ? `SELECT es.*, u.name as student_name, u.roll_number FROM exam_seats es JOIN users u ON u.id=es.student_id WHERE es.exam_id=$1 AND es.room_id=$2 ORDER BY u.name`
+      : `SELECT es.*, u.name as student_name, u.roll_number FROM exam_seats es JOIN users u ON u.id=es.student_id WHERE es.exam_id=$1 ORDER BY u.name`;
+    const params = room_id ? [req.params.id, room_id] : [req.params.id];
+    const { rows } = await pool.query(q, params);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/exams/:id/seats — bulk assign students to rooms
 app.post('/api/exams/:id/seats', auth(['admin']), async (req, res) => {
   const assignments = req.body; // [{ student_id, room_id }]
