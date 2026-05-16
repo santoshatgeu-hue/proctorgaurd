@@ -1075,13 +1075,15 @@ async function saveAssignments() {
     const res = await fetch(`/api/exams/${currentExamId}/seats`, {
       method: 'POST', headers, body: JSON.stringify(assignments)
     });
+    // Always close modal first
+    document.getElementById('assign-modal').classList.remove('open');
     if (res.ok) {
-      closeModal('assign-modal');
       loadRooms();
       showToast(`✅ ${studentIds.length} student${studentIds.length!==1?'s':''} assigned to room`);
     } else {
-      const d = await res.json();
-      alert(d.error || 'Assignment failed');
+      const d = await res.json().catch(() => ({}));
+      showToast(`⚠️ ${d.error || 'Some assignments may have failed'}`);
+      loadRooms(); // refresh anyway to show current state
     }
   } catch(e) { alert('Assignment failed: ' + e.message); }
 }
