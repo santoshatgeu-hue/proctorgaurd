@@ -1144,14 +1144,33 @@ io.on('connection', (socket) => {
     socket.emit('sessions:snapshot', roomStudents);
   });
 
-  socket.on('violation:report', ({ studentId, roomId, type, severity, studentName }) => {
+  socket.on('violation:report', async ({ studentId, roomId, examId, type, description, severity, studentName }) => {
+    // Update in-memory session
     if (sessions.has(studentId)) {
       sessions.get(studentId).violations++;
-      if (sessions.get(studentId).violations >= 5) sessions.get(studentId).status = 'flagged';
-      else if (sessions.get(studentId).violations >= 2) sessions.get(studentId).status = 'warn';
+      const v = sessions.get(studentId).violations;
+      if (v >= 5) sessions.get(studentId).status = 'flagged';
+      else if (v >= 2) sessions.get(studentId).status = 'warn';
     }
+
+    // Save to DB
+    try {
+      const { rows: seatRows } = await pool.query(
+        'SELECT id FROM exam_seats WHERE student_id=$1 AND exam_id=$2 LIMIT 1',
+        [studentId, examId]
+      );
+      if (seatRows[0]) {
+        await pool.query(
+          `INSERT INTO violations (seat_id, student_id, exam_id, room_id, type, description)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [seatRows[0].id, studentId, examId, roomId, type || 'other', description || null]
+        );
+      }
+    } catch(e) { console.error('Violation DB save error:', e.message); }
+
+    // Notify proctor in real-time
     io.to(`proctor:${roomId}`).emit('violation:new', {
-      studentId, studentName, type, severity,
+      studentId, studentName, type, description, severity,
       totalViolations: sessions.get(studentId)?.violations || 0,
       studentStatus: sessions.get(studentId)?.status || 'active'
     });
