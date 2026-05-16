@@ -70,7 +70,7 @@
   </div>
 
   <div class="default-creds">
-    
+    Default admin: <strong>admin@proctorguard.com</strong> / <strong>Admin@123</strong>
   </div>
 </div>
 
@@ -90,10 +90,11 @@ if (stored) {
     const u = JSON.parse(atob(stored.split('.')[1]));
     if (u.exp * 1000 > Date.now()) {
       const roles = u.roles || [u.role];
-      const dest = roles.includes('admin') ? '/admin'
-                 : roles.includes('student') ? '/student'
-                 : roles.some(r => ['faculty','moderator','proctor'].includes(r)) ? '/portal'
-                 : '/';
+      let dest = '/';
+      if (roles.includes('admin')) dest = '/admin';
+      else if (roles.includes('student')) dest = '/student';
+      else if (roles.length === 1 && roles[0] === 'proctor') dest = '/proctor';
+      else if (roles.some(r => ['faculty','moderator','proctor'].includes(r))) dest = '/portal';
       window.location.href = dest;
     }
   } catch {}
@@ -136,10 +137,11 @@ async function login() {
       window.location.href = '/change-password.html'; return;
     }
     const roles = data.user.roles || [data.user.role];
-    const dest = roles.includes('admin') ? '/admin'
-               : roles.includes('student') ? '/student'
-               : roles.some(r => ['faculty','moderator','proctor'].includes(r)) ? '/portal'
-               : '/';
+    let dest = '/';
+    if (roles.includes('admin')) dest = '/admin';
+    else if (roles.includes('student')) dest = '/student';
+    else if (roles.length === 1 && roles[0] === 'proctor') dest = '/proctor';
+    else if (roles.some(r => ['faculty','moderator','proctor'].includes(r))) dest = '/portal';
     window.location.href = dest;
   } catch (e) {
     errEl.textContent = 'Server error. Please try again.';
