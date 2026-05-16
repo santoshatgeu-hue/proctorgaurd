@@ -1025,34 +1025,46 @@ function updateAssignCount() {
 }
 
 async function saveAndClose() {
-  // Close modal immediately no matter what
-  document.getElementById('assign-modal').classList.remove('open');
+  const modal = document.getElementById('assign-modal');
+  modal.classList.remove('open'); // close FIRST
 
   const checkboxes = document.querySelectorAll(
     '#assign-student-list input[type="checkbox"]:checked:not(:disabled)');
   const studentIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
-  if (!studentIds.length) { showToast('No new students selected'); return; }
 
-  showToast('Saving...');
+  if (!studentIds.length) {
+    showToast('No new students selected');
+    loadRooms();
+    loadExams();
+    return;
+  }
+
   try {
     const assignments = studentIds.map(student_id => ({ student_id, room_id: currentRoomId }));
     const res = await fetch(`/api/exams/${currentExamId}/seats`, {
       method: 'POST', headers, body: JSON.stringify(assignments)
     });
-    loadRooms();
     if (res.ok) {
       showToast(`✅ ${studentIds.length} student${studentIds.length!==1?'s':''} assigned`);
     } else {
       const d = await res.json().catch(()=>({}));
-      showToast(`⚠️ ${d.error||'Some assignments may have failed'}`);
+      showToast(`⚠️ ${d.error||'Assignment may have failed'}`);
     }
   } catch(e) {
     showToast('Error: ' + e.message);
+  } finally {
     loadRooms();
+    loadExams(); // refresh student count in exam table too
   }
 }
 
 async function saveAssignments() { saveAndClose(); }
+
+// Wire up save button after DOM loads to avoid onclick issues
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('save-assign-btn');
+  if (btn) btn.addEventListener('click', (e) => { e.stopPropagation(); saveAndClose(); });
+});
 
 // ── DELETE EXAM ──────────────────────────────────────────────
 async function deleteExam(id, title) {
@@ -1081,7 +1093,7 @@ async function deleteRoom(roomId) {
   <div class="modal" style="max-width:560px;max-height:82vh;display:flex;flex-direction:column">
     <div class="modal-head">
       <h3>Assign Students — <span id="assign-room-name"></span></h3>
-      <button class="modal-close" onclick="document.getElementById('assign-modal').classList.remove('open')">✕</button>
+      <button class="modal-close" onclick="event.stopPropagation();document.getElementById('assign-modal').classList.remove('open')">✕</button>
     </div>
     <div class="modal-body" style="flex:1;overflow-y:auto">
       <div style="font-size:12px;color:var(--muted);margin-bottom:10px" id="assign-subject-label"></div>
@@ -1096,8 +1108,8 @@ async function deleteRoom(roomId) {
     <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
       <span id="assign-count" style="font-size:12px;color:var(--muted)">0 selected</span>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px" onclick="document.getElementById('assign-modal').classList.remove('open')">Cancel</button>
-        <button class="btn btn-primary" style="font-size:12px;padding:6px 14px" id="save-assign-btn" onclick="saveAndClose()">Save & Close</button>
+        <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px" onclick="event.stopPropagation();document.getElementById('assign-modal').classList.remove('open')">Cancel</button>
+        <button class="btn btn-primary" style="font-size:12px;padding:6px 14px" id="save-assign-btn" onclick="event.stopPropagation();saveAndClose()">Save & Close</button>
       </div>
     </div>
   </div>
