@@ -658,8 +658,8 @@ async function createExam() {
     subject_id:   document.getElementById('e-subject').value,
     paper_id:     document.getElementById('e-paper').value,
     title:        document.getElementById('e-title').value,
-    scheduled_at: document.getElementById('e-start').value,
-    ends_at:      document.getElementById('e-end').value,
+    scheduled_at: new Date(document.getElementById('e-start').value).toISOString(),
+    ends_at:      new Date(document.getElementById('e-end').value).toISOString(),
   };
   if (!body.subject_id || !body.paper_id || !body.title || !body.scheduled_at || !body.ends_at)
     return alert('All fields required');
@@ -951,40 +951,11 @@ function showToast(msg) {
   t._timer = setTimeout(() => t.style.opacity = '0', 3000);
 }
 
-</script>
-
-<!-- ASSIGN STUDENTS MODAL -->
-<div class="modal-overlay" id="assign-modal">
-  <div class="modal" style="max-width:560px;max-height:82vh;display:flex;flex-direction:column">
-    <div class="modal-head">
-      <h3>Assign Students — <span id="assign-room-name"></span></h3>
-      <button class="modal-close" onclick="closeModal('assign-modal')">✕</button>
-    </div>
-    <div class="modal-body" style="flex:1;overflow-y:auto">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px" id="assign-subject-label"></div>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <input type="text" id="student-search" placeholder="Search by name or roll number..."
-          style="flex:1;padding:8px 12px;border-radius:7px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-family:inherit;font-size:13px"
-          oninput="filterStudents()">
-        <button onclick="selectAllStudents()" style="font-size:12px;padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--muted);cursor:pointer;white-space:nowrap">Select All</button>
-      </div>
-      <div id="assign-student-list" style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow-y:auto;padding-right:2px"></div>
-    </div>
-    <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-      <span id="assign-count" style="font-size:12px;color:var(--muted)">0 selected</span>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px" onclick="closeModal('assign-modal')">Cancel</button>
-        <button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="saveAssignments()">Assign Students</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
 // ── ASSIGN STUDENTS ──────────────────────────────────────────
 let currentRoomId = null;
 let allStudentsForAssign = [];
 let alreadyAssigned = [];
+let currentExamSubjectId = null;
 
 async function openAssignStudents(roomId, roomName) {
   currentRoomId = roomId;
@@ -993,28 +964,21 @@ async function openAssignStudents(roomId, roomName) {
   document.getElementById('assign-student-list').innerHTML =
     '<div style="color:var(--muted);font-size:13px;padding:12px">Loading students...</div>';
   document.getElementById('assign-modal').classList.add('open');
-
   try {
-    // Get students enrolled in this exam's subject
     const url = currentExamSubjectId
       ? `/api/users?role=student&subject_id=${currentExamSubjectId}`
       : `/api/users?role=student`;
     const studRes = await fetch(url, { headers });
     allStudentsForAssign = await studRes.json();
-
     if (currentExamSubjectId) {
-      // Get subject name for label
       const examRes = await fetch(`/api/exams/${currentExamId}`, { headers });
       const examData = await examRes.json();
       document.getElementById('assign-subject-label').textContent =
-        `Showing students enrolled in: ${examData.subject_name || ''} (${examData.subject_code || ''})`;
+        `Showing students enrolled in: ${examData.subject_name||''} (${examData.subject_code||''})`;
     }
-
-    // Get already assigned students in this room
     const seatsRes = await fetch(`/api/exams/${currentExamId}/seats?room_id=${roomId}`, { headers });
     const seatsData = await seatsRes.json().catch(() => []);
     alreadyAssigned = Array.isArray(seatsData) ? seatsData.map(s => s.student_id) : [];
-
     renderStudentList(allStudentsForAssign);
   } catch(e) {
     document.getElementById('assign-student-list').innerHTML =
@@ -1025,19 +989,19 @@ async function openAssignStudents(roomId, roomName) {
 function renderStudentList(students) {
   const list = document.getElementById('assign-student-list');
   if (!students.length) {
-    list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px">No students found enrolled in this subject. Make sure students are bulk uploaded with the correct subject_codes.</div>';
+    list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px">No students found. Make sure students are uploaded with the correct subject_codes.</div>';
     return;
   }
   list.innerHTML = students.map(s => {
     const isAssigned = alreadyAssigned.includes(s.id);
     return `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;cursor:pointer">
-      <input type="checkbox" value="${s.id}" ${isAssigned ? 'checked disabled' : ''}
+      <input type="checkbox" value="${s.id}" ${isAssigned?'checked disabled':''}
         onchange="updateAssignCount()" style="width:15px;height:15px;flex-shrink:0;cursor:pointer">
       <div style="flex:1">
         <div style="font-size:13px;font-weight:600;color:var(--text)">${s.name}</div>
-        <div style="font-size:11px;color:var(--muted)">${s.roll_number || ''} ${s.email || ''}</div>
+        <div style="font-size:11px;color:var(--muted)">${s.roll_number||''} ${s.email||''}</div>
       </div>
-      ${isAssigned ? '<span style="font-size:11px;color:var(--success);font-weight:600;flex-shrink:0">✓ Assigned</span>' : ''}
+      ${isAssigned?'<span style="font-size:11px;color:var(--success);font-weight:600;flex-shrink:0">✓ Assigned</span>':''}
     </label>`;
   }).join('');
   updateAssignCount();
@@ -1045,11 +1009,8 @@ function renderStudentList(students) {
 
 function filterStudents() {
   const q = document.getElementById('student-search').value.toLowerCase();
-  const filtered = allStudentsForAssign.filter(s =>
-    (s.name||'').toLowerCase().includes(q) ||
-    (s.roll_number||'').toLowerCase().includes(q)
-  );
-  renderStudentList(filtered);
+  renderStudentList(allStudentsForAssign.filter(s =>
+    (s.name||'').toLowerCase().includes(q)||(s.roll_number||'').toLowerCase().includes(q)));
 }
 
 function selectAllStudents() {
@@ -1069,23 +1030,23 @@ async function saveAssignments() {
     '#assign-student-list input[type="checkbox"]:checked:not(:disabled)');
   const studentIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
   if (!studentIds.length) { alert('Select at least one student'); return; }
-
   try {
     const assignments = studentIds.map(student_id => ({ student_id, room_id: currentRoomId }));
     const res = await fetch(`/api/exams/${currentExamId}/seats`, {
       method: 'POST', headers, body: JSON.stringify(assignments)
     });
-    // Always close modal first
     document.getElementById('assign-modal').classList.remove('open');
+    loadRooms();
     if (res.ok) {
-      loadRooms();
-      showToast(`✅ ${studentIds.length} student${studentIds.length!==1?'s':''} assigned to room`);
+      showToast(`✅ ${studentIds.length} student${studentIds.length!==1?'s':''} assigned`);
     } else {
-      const d = await res.json().catch(() => ({}));
-      showToast(`⚠️ ${d.error || 'Some assignments may have failed'}`);
-      loadRooms(); // refresh anyway to show current state
+      const d = await res.json().catch(()=>({}));
+      showToast(`⚠️ ${d.error||'Some assignments may have failed'}`);
     }
-  } catch(e) { alert('Assignment failed: ' + e.message); }
+  } catch(e) {
+    document.getElementById('assign-modal').classList.remove('open');
+    showToast('Assignment failed: ' + e.message);
+  }
 }
 
 // ── DELETE EXAM ──────────────────────────────────────────────
@@ -1094,20 +1055,48 @@ async function deleteExam(id, title) {
   try {
     const res = await fetch(`/api/exams/${id}`, { method: 'DELETE', headers });
     if (res.ok) { loadExams(); loadDashboard(); showToast(`✅ Exam "${title}" deleted`); }
-    else { const d = await res.json(); alert(d.error || 'Delete failed'); }
+    else { const d = await res.json(); alert(d.error||'Delete failed'); }
   } catch(e) { alert('Delete failed: ' + e.message); }
 }
 
 // ── DELETE ROOM ──────────────────────────────────────────────
 async function deleteRoom(roomId) {
-  if (!confirm('Delete this room? All student seat assignments will be removed.')) return;
+  if (!confirm('Delete this room? All student assignments will be removed.')) return;
   try {
     const res = await fetch(`/api/exams/rooms/${roomId}`, { method: 'DELETE', headers });
     if (res.ok) { loadRooms(); showToast('✅ Room deleted'); }
-    else { const d = await res.json(); alert(d.error || 'Delete failed'); }
+    else { const d = await res.json(); alert(d.error||'Delete failed'); }
   } catch(e) { alert('Delete failed: ' + e.message); }
 }
+
 </script>
+
+<!-- ASSIGN STUDENTS MODAL -->
+<div class="modal-overlay" id="assign-modal">
+  <div class="modal" style="max-width:560px;max-height:82vh;display:flex;flex-direction:column">
+    <div class="modal-head">
+      <h3>Assign Students — <span id="assign-room-name"></span></h3>
+      <button class="modal-close" onclick="document.getElementById('assign-modal').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body" style="flex:1;overflow-y:auto">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px" id="assign-subject-label"></div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input type="text" id="student-search" placeholder="Search by name or roll number..."
+          style="flex:1;padding:8px 12px;border-radius:7px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-family:inherit;font-size:13px"
+          oninput="filterStudents()">
+        <button onclick="selectAllStudents()" style="font-size:12px;padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--muted);cursor:pointer;white-space:nowrap">Select All</button>
+      </div>
+      <div id="assign-student-list" style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow-y:auto;padding-right:2px"></div>
+    </div>
+    <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <span id="assign-count" style="font-size:12px;color:var(--muted)">0 selected</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px" onclick="document.getElementById('assign-modal').classList.remove('open')">Cancel</button>
+        <button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="saveAssignments()">Assign Students</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
