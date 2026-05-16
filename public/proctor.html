@@ -91,8 +91,8 @@
   .student-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
   .student-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 14px; transition: all 0.15s; position: relative; overflow: hidden; }
   .student-card::before { content:''; position:absolute; top:0;left:0;right:0;height:3px; }
-  .student-card.status-not_started::before { background: var(--text-muted); }
-  .student-card.status-in_progress::before { background: var(--success); }
+  .student-card.status-pending::before { background: var(--text-muted); }
+  .student-card.status-active::before { background: var(--success); }
   .student-card.status-submitted::before { background: var(--accent2); }
   .student-card.status-absent::before { background: var(--danger); }
   .student-card.has-violation { border-color: var(--danger); }
@@ -101,8 +101,8 @@
   .student-roll { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
   .student-status { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; }
   .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .dot-not_started { background: var(--text-muted); }
-  .dot-in_progress { background: var(--success); animation: pulse 2s infinite; }
+  .dot-pending { background: var(--text-muted); }
+  .dot-active { background: var(--success); animation: pulse 2s infinite; }
   .dot-submitted { background: var(--accent2); }
   .dot-absent { background: var(--danger); }
   .student-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
@@ -128,8 +128,8 @@
 
   /* BADGES */
   .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
-  .badge-not_started { background: var(--surface2); color: var(--text-muted); }
-  .badge-in_progress { background: var(--success-bg); color: var(--success); }
+  .badge-pending { background: var(--surface2); color: var(--text-muted); }
+  .badge-active { background: var(--success-bg); color: var(--success); }
   .badge-submitted { background: var(--info-bg); color: var(--info); }
   .badge-absent { background: var(--danger-bg); color: var(--danger); }
 
@@ -297,8 +297,8 @@
         <div class="flex">
           <select id="monitorFilter" onchange="renderMonitor()" style="width:150px">
             <option value="">All Students</option>
-            <option value="not_started">Not Started</option>
-            <option value="in_progress">In Progress</option>
+            <option value="pending">Not Started</option>
+            <option value="active">In Progress</option>
             <option value="submitted">Submitted</option>
             <option value="absent">Absent</option>
           </select>
@@ -601,7 +601,7 @@ function showPage(pageId) {
 function renderDashboard() {
   const seats = STATE.seats;
   const total      = seats.length;
-  const active     = seats.filter(s => s.status === 'in_progress').length;
+  const active     = seats.filter(s => s.status === 'active').length;
   const submitted  = seats.filter(s => s.status === 'submitted').length;
   const absent     = seats.filter(s => s.status === 'absent' || (!s.started_at && !s.submitted_at)).length;
   const violations = STATE.violations.length;
@@ -647,7 +647,7 @@ function renderDashboard() {
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center">
       <div style="padding:10px;background:var(--surface2);border-radius:8px">
-        <div style="font-size:18px;font-weight:700;color:var(--text-muted)">${seats.filter(s=>s.status==='not_started'||(!s.started_at&&!s.submitted_at)).length}</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text-muted)">${seats.filter(s=>s.status==='pending'||(!s.started_at&&!s.submitted_at)).length}</div>
         <div style="font-size:11px;color:var(--text-muted)">Not Started</div>
       </div>
       <div style="padding:10px;background:var(--success-bg);border-radius:8px">
@@ -715,7 +715,7 @@ function renderMonitor() {
         ${s.submitted_at ? `<div style="font-size:10px;color:var(--info);margin-top:4px">✅ Submitted ${timeAgo(s.submitted_at)}</div>` : ''}
         <div class="student-actions" onclick="event.stopPropagation()">
           <button class="btn btn-danger btn-sm" onclick="openViolationModal(${s.id},'${esc(s.student_name||'')}')">⚠️</button>
-          ${status === 'in_progress' ? `<button class="btn btn-warning btn-sm" onclick="openForceSubmit(${s.id},'${esc(s.student_name||'')}')">⏹ Force</button>` : ''}
+          ${status === 'active' ? `<button class="btn btn-warning btn-sm" onclick="openForceSubmit(${s.id},'${esc(s.student_name||'')}')">⏹ Force</button>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -723,9 +723,9 @@ function renderMonitor() {
 
 function getSeatStatus(seat) {
   if (seat.status === 'submitted' || seat.submitted_at) return 'submitted';
-  if (seat.status === 'in_progress' || seat.started_at) return 'in_progress';
+  if (seat.status === 'active' || seat.started_at) return 'active';
   if (seat.status === 'absent') return 'absent';
-  return 'not_started';
+  return 'pending';
 }
 
 function statusLabel(status) {
@@ -777,7 +777,7 @@ function openStudentDetail(seatId) {
   document.getElementById('studentModalFooter').innerHTML = `
     <button class="btn btn-secondary" onclick="closeModal('studentModal')">Close</button>
     <button class="btn btn-danger btn-sm" onclick="closeModal('studentModal');openViolationModal(${seat.id},'${esc(seat.student_name||'')}')">⚠️ Log Violation</button>
-    ${status === 'in_progress' ? `<button class="btn btn-warning btn-sm" onclick="closeModal('studentModal');openForceSubmit(${seat.id},'${esc(seat.student_name||'')}')">⏹ Force Submit</button>` : ''}`;
+    ${status === 'active' ? `<button class="btn btn-warning btn-sm" onclick="closeModal('studentModal');openForceSubmit(${seat.id},'${esc(seat.student_name||'')}')">⏹ Force Submit</button>` : ''}`;
 
   openModal('studentModal');
 }
@@ -943,12 +943,12 @@ function refreshVideoFeeds() {
 // ═══════════════════════════════════════════════════
 function statusBadge(status) {
   const map = {
-    not_started: ['not_started','⬜ Not Started'],
+    not_started: ['pending','⬜ Not Started'],
     in_progress: ['in_progress','🟢 In Progress'],
     submitted: ['submitted','✅ Submitted'],
     absent: ['absent','❌ Absent'],
   };
-  const [cls, label] = map[status] || ['not_started', status];
+  const [cls, label] = map[status] || ['pending', status];
   return `<span class="badge badge-${cls}">${label}</span>`;
 }
 
