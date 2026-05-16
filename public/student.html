@@ -743,48 +743,104 @@ function toggleFlag(index) {
 // ═══════════════════════════════════════════════════
 //  VIOLATION DETECTION
 // ═══════════════════════════════════════════════════
+// ── violation type → DB allowed values ──────────────────────
+// phone_use | talking | copying | tab_switch | unauthorized_material | other
+
+let violationListeners = []; // track listeners for cleanup
+
 function initViolationDetection() {
-  // Tab switch / visibility change
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) reportViolation('tab_switch', 'Student switched to another tab or window');
-  });
+  // Guard — only fire when exam is active
+  const examActive = () => !!STATE.seatId && document.getElementById('examInterface')?.classList.contains('active');
 
-  // Right-click disabled
-  document.addEventListener('contextmenu', (e) => {
+  const onVisibility = () => {
+    if (!examActive()) return;
+    if (document.hidden) reportViolation('tab_switch', 'Switched to another tab or window');
+  };
+
+  const onContextMenu = (e) => {
+    if (!examActive()) return;
     e.preventDefault();
-    reportViolation('tab_switch', 'Right-click attempted');
+    reportViolation('other', 'Right-click attempted during exam');
     showViolationBanner('⚠️ Right-click is disabled during the exam');
-  });
+  };
 
-  // Copy / paste / cut disabled
-  ['copy','cut','paste'].forEach(ev => {
-    document.addEventListener(ev, (e) => {
-      e.preventDefault();
-      reportViolation('tab_switch', `${ev} attempted during exam`);
-      showViolationBanner(`⚠️ ${ev.charAt(0).toUpperCase()+ev.slice(1)} is not allowed during the exam`);
-    });
-  });
+  const onCopy = (e) => {
+    if (!examActive()) return;
+    e.preventDefault();
+    reportViolation('copying', 'Copy attempted during exam');
+    showViolationBanner('⚠️ Copying is not allowed during the exam');
+  };
 
-  // Keyboard shortcuts disabled (Ctrl+C, Ctrl+V, Ctrl+A, F12, PrintScreen)
-  document.addEventListener('keydown', (e) => {
-    const blocked = (e.ctrlKey || e.metaKey) && ['c','v','a','u','s','p'].includes(e.key.toLowerCase());
+  const onCut = (e) => {
+    if (!examActive()) return;
+    e.preventDefault();
+    reportViolation('copying', 'Cut attempted during exam');
+    showViolationBanner('⚠️ Cutting text is not allowed during the exam');
+  };
+
+  const onPaste = (e) => {
+    if (!examActive()) return;
+    e.preventDefault();
+    reportViolation('unauthorized_material', 'Paste attempted during exam');
+    showViolationBanner('⚠️ Pasting is not allowed during the exam');
+  };
+
+  const onKeydown = (e) => {
+    if (!examActive()) return;
+    const blocked = (e.ctrlKey || e.metaKey) && ['c','v','a','u','s','p','x'].includes(e.key.toLowerCase());
     const devtools = e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['i','j','c'].includes(e.key.toLowerCase()));
     const printscreen = e.key === 'PrintScreen';
-    if (blocked || devtools || printscreen) {
+    if (devtools) {
       e.preventDefault();
-      if (devtools) reportViolation('tab_switch', 'Attempted to open developer tools');
-      showViolationBanner('⚠️ This action is not allowed during the exam');
+      reportViolation('other', 'Attempted to open developer tools');
+      showViolationBanner('⚠️ Developer tools are not allowed during the exam');
+    } else if (printscreen) {
+      e.preventDefault();
+      reportViolation('other', 'PrintScreen attempted during exam');
+      showViolationBanner('⚠️ Screenshots are not allowed during the exam');
+    } else if (blocked) {
+      e.preventDefault();
+      showViolationBanner('⚠️ This keyboard shortcut is not allowed during the exam');
     }
-  });
+  };
 
-  // Window blur (switched app)
   let blurTimer;
-  window.addEventListener('blur', () => {
+  const onBlur = () => {
+    if (!examActive()) return;
     blurTimer = setTimeout(() => {
       reportViolation('tab_switch', 'Student left the exam window');
-    }, 2000); // 2s grace period
+    }, 2000);
+  };
+  const onFocus = () => clearTimeout(blurTimer);
+
+  // Register all listeners
+  document.addEventListener('visibilitychange', onVisibility);
+  document.addEventListener('contextmenu', onContextMenu);
+  document.addEventListener('copy', onCopy);
+  document.addEventListener('cut', onCut);
+  document.addEventListener('paste', onPaste);
+  document.addEventListener('keydown', onKeydown);
+  window.addEventListener('blur', onBlur);
+  window.addEventListener('focus', onFocus);
+
+  // Store for cleanup on exam exit
+  violationListeners = [
+    ['document', 'visibilitychange', onVisibility],
+    ['document', 'contextmenu', onContextMenu],
+    ['document', 'copy', onCopy],
+    ['document', 'cut', onCut],
+    ['document', 'paste', onPaste],
+    ['document', 'keydown', onKeydown],
+    ['window', 'blur', onBlur],
+    ['window', 'focus', onFocus],
+  ];
+}
+
+function cleanupViolationDetection() {
+  violationListeners.forEach(([target, event, fn]) => {
+    (target === 'window' ? window : document).removeEventListener(event, fn);
   });
-  window.addEventListener('focus', () => clearTimeout(blurTimer));
+  violationListeners = [];
 }
 
 function showViolationBanner(msg) {
@@ -801,25 +857,33 @@ function showViolationBanner(msg) {
 }
 
 async function reportViolation(type, description) {
-  // Send via socket
+  if (!STATE.seatId) return; // must be in an active exam
+
+  // Allowed types: phone_use | talking | copying | tab_switch | unauthorized_material | other
+  const allowed = ['phone_use','talking','copying','tab_switch','unauthorized_material','other'];
+  const safeType = allowed.includes(type) ? type : 'other';
+
+  // Send via socket to proctor in real-time
   if (socket && STATE.exam) {
     socket.emit('violation:report', {
       studentId: STATE.user.id,
       roomId: STATE.exam.room_id,
       examId: STATE.exam.exam_id,
-      type,
-      description,
+      type: safeType,
+      severity: 'med',
       studentName: STATE.user.name,
+      description,
     });
   }
-  // Also save via API
+
+  // Save to DB
   try {
     await api('POST', '/api/student/violation', {
       seat_id: STATE.seatId,
-      type,
+      type: safeType,
       description,
     });
-  } catch(e) { /* silent */ }
+  } catch(e) { /* silent — don't disrupt exam */ }
 }
 async function initSocketAndCamera() {
   // Connect socket
@@ -1286,6 +1350,7 @@ async function doSubmit() {
 function exitExam() {
   clearInterval(STATE.timerInterval);
   clearInterval(STATE.autoSaveInterval);
+  cleanupViolationDetection();
   // Stop camera
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
   if (faceDetectionInterval) { clearInterval(faceDetectionInterval); faceDetectionInterval = null; }
