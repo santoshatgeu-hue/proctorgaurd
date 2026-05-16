@@ -655,7 +655,7 @@ app.delete('/api/exams/:id', auth(['admin']), async (req, res) => {
   try {
     // Cascade: delete answers → seats → rooms → exam
     await pool.query(`DELETE FROM answers WHERE seat_id IN (SELECT id FROM exam_seats WHERE exam_id=$1)`, [id]);
-    await pool.query(`DELETE FROM violations WHERE seat_id IN (SELECT id FROM exam_seats WHERE exam_id=$1)`, [id]);
+    await pool.query(`DELETE FROM violations WHERE exam_id=$1`, [id]);
     await pool.query(`DELETE FROM results WHERE exam_id=$1`, [id]);
     await pool.query(`DELETE FROM exam_seats WHERE exam_id=$1`, [id]);
     await pool.query(`DELETE FROM exam_rooms WHERE exam_id=$1`, [id]);
@@ -727,11 +727,11 @@ app.get('/api/student/exams', auth(['student']), async (req, res) => {
   try {
     // Auto-update exam statuses based on current time
     await pool.query(`
-      UPDATE exams SET status='active'
+      UPDATE exams SET status='live'
       WHERE status='scheduled' AND scheduled_at <= NOW() AND ends_at >= NOW()`);
     await pool.query(`
-      UPDATE exams SET status='ended'
-      WHERE status IN ('scheduled','active') AND ends_at < NOW()`);
+      UPDATE exams SET status='completed'
+      WHERE status IN ('scheduled','live') AND ends_at < NOW()`);
 
     const { rows } = await pool.query(
       `SELECT e.id as exam_id, e.title, e.scheduled_at, e.ends_at, e.status as exam_status,
@@ -791,7 +791,7 @@ app.get('/api/student/exam', auth(['student']), async (req, res) => {
 
     // Auto-activate exams that have reached their scheduled time
     await pool.query(
-      `UPDATE exams SET status='active'
+      `UPDATE exams SET status='live'
        WHERE status='scheduled' AND scheduled_at <= $1 AND ends_at >= $1`, [now]
     );
 
