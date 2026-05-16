@@ -769,6 +769,25 @@ app.get('/api/student/results', auth(['student']), async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/student/violation — student-side violation logging
+app.post('/api/student/violation', auth(['student']), async (req, res) => {
+  const { seat_id, type, description } = req.body;
+  if (!seat_id || !type) return res.status(400).json({ error: 'seat_id and type required' });
+  try {
+    const { rows: seatRows } = await pool.query(
+      'SELECT exam_id, room_id FROM exam_seats WHERE id=$1 AND student_id=$2',
+      [seat_id, req.user.id]
+    );
+    if (!seatRows[0]) return res.status(404).json({ error: 'Seat not found' });
+    await pool.query(
+      `INSERT INTO violations (seat_id, student_id, exam_id, room_id, type, description)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [seat_id, req.user.id, seatRows[0].exam_id, seatRows[0].room_id, type, description||null]
+    );
+    res.json({ logged: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/student/essay-upload — upload scanned answer sheet
 app.post('/api/student/essay-upload', auth(['student']), upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
