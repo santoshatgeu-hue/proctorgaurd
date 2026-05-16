@@ -951,11 +951,10 @@ function showToast(msg) {
   t._timer = setTimeout(() => t.style.opacity = '0', 3000);
 }
 
-// ── ASSIGN STUDENTS ──────────────────────────────────────────
+// ── ASSIGN STUDENTS JS (merged into main script) ─────────────
 let currentRoomId = null;
 let allStudentsForAssign = [];
 let alreadyAssigned = [];
-let currentExamSubjectId = null;
 
 async function openAssignStudents(roomId, roomName) {
   currentRoomId = roomId;
