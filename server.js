@@ -823,7 +823,7 @@ app.get('/api/student/exam', auth(['student']), async (req, res) => {
 
     // Mark seat as started
     await pool.query(
-      `UPDATE exam_seats SET status='in_progress', started_at=COALESCE(started_at,NOW()) WHERE id=$1`,
+      `UPDATE exam_seats SET status='active', started_at=COALESCE(started_at,NOW()) WHERE id=$1`,
       [rows[0].seat_id]
     );
 
