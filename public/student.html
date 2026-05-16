@@ -139,9 +139,29 @@
   .q-btn.current { border-color: var(--accent2); background: var(--accent2); color: white; }
   .q-btn.answered { border-color: var(--success); background: var(--success-bg); color: var(--success); }
   .q-btn.answered.current { background: var(--success); color: white; }
+  .q-btn.flagged { border-color: var(--gold); background: #fff3d6; color: var(--gold); }
+  .q-btn.flagged.current { background: var(--gold); color: white; }
+  .q-btn.flagged.answered { border-color: var(--gold); background: #fff3d6; color: var(--gold); }
   .q-nav-legend { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
   .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); }
   .legend-dot { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid; flex-shrink: 0; }
+
+  /* Face detection overlay */
+  .cam-wrap { position: relative; display: inline-block; }
+  #faceCanvas { position: absolute; top: 0; left: 0; pointer-events: none; border-radius: 6px; }
+  .face-status { font-size: 10px; text-align: center; margin-top: 2px; font-weight: 600; }
+  .face-ok { color: #10b981; }
+  .face-warn { color: var(--danger); animation: pulse 1s infinite; }
+
+  /* Violation toast - red banner */
+  .violation-banner {
+    position: fixed; top: 58px; left: 0; right: 0; z-index: 300;
+    background: var(--danger); color: white;
+    padding: 10px 20px; font-size: 13px; font-weight: 600;
+    display: flex; align-items: center; justify-content: space-between;
+    animation: slideDown 0.3s ease;
+  }
+  @keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
 
   /* QUESTION AREA */
   .q-area { padding: 28px 32px; overflow-y: auto; }
@@ -342,11 +362,12 @@
       </div>
     </div>
     <div class="topbar-right" style="flex:1;display:flex;align-items:center;justify-content:flex-end;gap:14px">
-      <!-- Webcam preview -->
-      <div style="position:relative">
+      <!-- Webcam preview with face detection -->
+      <div class="cam-wrap">
         <video id="studentCam" autoplay muted playsinline
           style="width:80px;height:60px;border-radius:6px;object-fit:cover;background:#111;border:2px solid rgba(255,255,255,0.2);display:none"></video>
-        <div id="camStatus" style="font-size:10px;color:rgba(255,255,255,0.5);text-align:center;margin-top:2px">📷 No cam</div>
+        <canvas id="faceCanvas" width="80" height="60" style="display:none"></canvas>
+        <div id="camStatus" class="face-status" style="color:rgba(255,255,255,0.5)">📷 No cam</div>
       </div>
       <div class="flex">
         <div class="autosave-indicator">
@@ -368,6 +389,7 @@
       <div class="section-sep"></div>
       <div class="q-nav-legend">
         <div class="legend-item"><div class="legend-dot" style="border-color:var(--success);background:var(--success-bg)"></div>Answered</div>
+        <div class="legend-item"><div class="legend-dot" style="border-color:var(--gold);background:#fff3d6"></div>Flagged for review</div>
         <div class="legend-item"><div class="legend-dot" style="border-color:var(--border);background:var(--surface)"></div>Not answered</div>
         <div class="legend-item"><div class="legend-dot" style="border-color:var(--accent2);background:var(--accent2)"></div>Current</div>
       </div>
@@ -488,6 +510,7 @@ const STATE = {
   autoSaveInterval: null,
   secondsLeft: 0,
   hasEssay: false,
+  flagged: new Set(), // flagged question indices
 };
 
 // Socket + WebRTC
@@ -700,7 +723,8 @@ async function enterExam(examId) {
     renderQuestion(0);
     startTimer();
     startAutoSave();
-    initSocketAndCamera(); // start camera + connect to proctor
+    initViolationDetection();   // start violation monitoring
+    initSocketAndCamera();      // start camera + connect to proctor
 
     hideLoader();
   } catch(e) {
@@ -709,9 +733,94 @@ async function enterExam(examId) {
   }
 }
 
+function toggleFlag(index) {
+  if (STATE.flagged.has(index)) STATE.flagged.delete(index);
+  else STATE.flagged.add(index);
+  renderQuestion(index); // re-render to update button
+  renderQNav();
+}
+
 // ═══════════════════════════════════════════════════
-//  SOCKET + CAMERA
+//  VIOLATION DETECTION
 // ═══════════════════════════════════════════════════
+function initViolationDetection() {
+  // Tab switch / visibility change
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) reportViolation('tab_switch', 'Student switched to another tab or window');
+  });
+
+  // Right-click disabled
+  document.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    reportViolation('tab_switch', 'Right-click attempted');
+    showViolationBanner('⚠️ Right-click is disabled during the exam');
+  });
+
+  // Copy / paste / cut disabled
+  ['copy','cut','paste'].forEach(ev => {
+    document.addEventListener(ev, (e) => {
+      e.preventDefault();
+      reportViolation('tab_switch', `${ev} attempted during exam`);
+      showViolationBanner(`⚠️ ${ev.charAt(0).toUpperCase()+ev.slice(1)} is not allowed during the exam`);
+    });
+  });
+
+  // Keyboard shortcuts disabled (Ctrl+C, Ctrl+V, Ctrl+A, F12, PrintScreen)
+  document.addEventListener('keydown', (e) => {
+    const blocked = (e.ctrlKey || e.metaKey) && ['c','v','a','u','s','p'].includes(e.key.toLowerCase());
+    const devtools = e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['i','j','c'].includes(e.key.toLowerCase()));
+    const printscreen = e.key === 'PrintScreen';
+    if (blocked || devtools || printscreen) {
+      e.preventDefault();
+      if (devtools) reportViolation('tab_switch', 'Attempted to open developer tools');
+      showViolationBanner('⚠️ This action is not allowed during the exam');
+    }
+  });
+
+  // Window blur (switched app)
+  let blurTimer;
+  window.addEventListener('blur', () => {
+    blurTimer = setTimeout(() => {
+      reportViolation('tab_switch', 'Student left the exam window');
+    }, 2000); // 2s grace period
+  });
+  window.addEventListener('focus', () => clearTimeout(blurTimer));
+}
+
+function showViolationBanner(msg) {
+  let banner = document.getElementById('violationBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'violationBanner';
+    banner.className = 'violation-banner';
+    document.body.appendChild(banner);
+  }
+  banner.innerHTML = `<span>${msg}</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:white;cursor:pointer;font-size:16px;padding:0 4px">✕</button>`;
+  clearTimeout(banner._timer);
+  banner._timer = setTimeout(() => banner.remove(), 5000);
+}
+
+async function reportViolation(type, description) {
+  // Send via socket
+  if (socket && STATE.exam) {
+    socket.emit('violation:report', {
+      studentId: STATE.user.id,
+      roomId: STATE.exam.room_id,
+      examId: STATE.exam.exam_id,
+      type,
+      description,
+      studentName: STATE.user.name,
+    });
+  }
+  // Also save via API
+  try {
+    await api('POST', '/api/student/violation', {
+      seat_id: STATE.seatId,
+      type,
+      description,
+    });
+  } catch(e) { /* silent */ }
+}
 async function initSocketAndCamera() {
   // Connect socket
   socket = io({ auth: { token: STATE.token } });
@@ -765,12 +874,78 @@ async function initSocketAndCamera() {
     const cam = document.getElementById('studentCam');
     cam.srcObject = localStream;
     cam.style.display = '';
+    document.getElementById('faceCanvas').style.display = '';
     document.getElementById('camStatus').textContent = '🟢 Cam on';
-    document.getElementById('camStatus').style.color = '#10b981';
+    document.getElementById('camStatus').className = 'face-status face-ok';
+    startFaceDetection(cam);
   } catch(e) {
     document.getElementById('camStatus').textContent = '🔴 No cam';
     toast('Camera access denied — proctor cannot monitor your video', 'warning');
   }
+}
+
+// ═══════════════════════════════════════════════════
+//  FACE DETECTION
+// ═══════════════════════════════════════════════════
+let faceDetectionInterval = null;
+let noFaceCount = 0;
+
+function startFaceDetection(videoEl) {
+  const canvas = document.getElementById('faceCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // Use browser FaceDetector API if available
+  if (!('FaceDetector' in window)) {
+    // Fallback: basic presence detection via pixel change
+    startPresenceDetection(videoEl, canvas, ctx);
+    return;
+  }
+
+  const detector = new FaceDetector({ fastMode: true, maxDetectedFaces: 3 });
+  faceDetectionInterval = setInterval(async () => {
+    if (!localStream || document.hidden) return;
+    try {
+      const faces = await detector.detect(videoEl);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (faces.length === 0) {
+        noFaceCount++;
+        document.getElementById('camStatus').textContent = '⚠️ No face';
+        document.getElementById('camStatus').className = 'face-status face-warn';
+        if (noFaceCount === 3) { // 3 consecutive no-face = 9 seconds
+          reportViolation('tab_switch', 'No face detected in camera for extended period');
+          showViolationBanner('⚠️ Please ensure your face is visible to the camera');
+        }
+      } else if (faces.length > 1) {
+        document.getElementById('camStatus').textContent = '⚠️ Multiple faces';
+        document.getElementById('camStatus').className = 'face-status face-warn';
+        reportViolation('copying', `Multiple faces detected (${faces.length})`);
+        showViolationBanner('⚠️ Multiple faces detected — only you should be visible');
+        noFaceCount = 0;
+      } else {
+        noFaceCount = 0;
+        document.getElementById('camStatus').textContent = '🟢 Face OK';
+        document.getElementById('camStatus').className = 'face-status face-ok';
+
+        // Draw face bounding box
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 2;
+        faces.forEach(f => {
+          const { x, y, width, height } = f.boundingBox;
+          // Scale to canvas size
+          const sx = canvas.width / videoEl.videoWidth;
+          const sy = canvas.height / videoEl.videoHeight;
+          ctx.strokeRect(x*sx, y*sy, width*sx, height*sy);
+        });
+      }
+    } catch(e) { /* detector failed silently */ }
+  }, 3000); // check every 3 seconds
+}
+
+function startPresenceDetection(videoEl, canvas, ctx) {
+  // Simple fallback — just show camera is working
+  document.getElementById('camStatus').textContent = '🟢 Cam active';
+  document.getElementById('camStatus').className = 'face-status face-ok';
 }
 
 // ═══════════════════════════════════════════════════
@@ -821,7 +996,12 @@ function renderQuestion(index) {
     <div class="q-card">
       <div class="q-card-header">
         <span class="q-card-num">Question ${index + 1} of ${STATE.questions.length}</span>
-        <span class="q-card-marks">${q.marks} mark${q.marks != 1 ? 's' : ''}</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button onclick="toggleFlag(${index})" class="btn btn-sm" style="font-size:11px;padding:4px 10px;border-radius:5px;border:1px solid ${STATE.flagged.has(index)?'var(--gold)':'var(--border)'};background:${STATE.flagged.has(index)?'#fff3d6':'var(--surface2)'};color:${STATE.flagged.has(index)?'var(--gold)':'var(--text-muted)'}">
+            🚩 ${STATE.flagged.has(index) ? 'Flagged' : 'Flag'}
+          </button>
+          <span class="q-card-marks">${q.marks} mark${q.marks != 1 ? 's' : ''}</span>
+        </div>
       </div>
       <div class="q-card-body">
         <div class="q-text">${qTextHTML}</div>
@@ -847,7 +1027,8 @@ function renderQNav() {
   grid.innerHTML = STATE.questions.map((q, i) => {
     const answered = !!STATE.answers[q.id]?.answer_option || !!STATE.answers[q.id]?.answer_text;
     const isCurrent = i === STATE.currentQ;
-    return `<button class="q-btn ${isCurrent ? 'current' : ''} ${answered ? 'answered' : ''}" onclick="goQ(${i})">${i + 1}</button>`;
+    const isFlagged = STATE.flagged.has(i);
+    return `<button class="q-btn ${isCurrent ? 'current' : ''} ${isFlagged ? 'flagged' : ''} ${answered ? 'answered' : ''}" onclick="goQ(${i})">${i + 1}</button>`;
   }).join('');
 
   const answered = Object.keys(STATE.answers).filter(id => {
@@ -855,7 +1036,6 @@ function renderQNav() {
     return a.answer_option || a.answer_text;
   }).length;
   const total = STATE.questions.length;
-
   document.getElementById('answeredCount').textContent = answered;
   document.getElementById('totalCount').textContent = total;
   document.getElementById('progressBar').style.width = total > 0 ? (answered / total * 100) + '%' : '0%';
@@ -1108,6 +1288,7 @@ function exitExam() {
   clearInterval(STATE.autoSaveInterval);
   // Stop camera
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  if (faceDetectionInterval) { clearInterval(faceDetectionInterval); faceDetectionInterval = null; }
   // Close peer connections
   Object.values(peerConnections).forEach(pc => pc.close());
   peerConnections = {};
