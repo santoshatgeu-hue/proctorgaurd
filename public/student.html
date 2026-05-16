@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
 <style>
   :root {
     --bg: #f5f4f0; --surface: #fff; --surface2: #f0ede6; --border: #e2ddd5;
@@ -340,12 +341,20 @@
         <div class="timer-label">Time Left</div>
       </div>
     </div>
-    <div class="flex">
-      <div class="autosave-indicator">
-        <div class="save-dot" id="saveDot"></div>
-        <span id="saveStatus">Auto-save on</span>
+    <div class="topbar-right" style="flex:1;display:flex;align-items:center;justify-content:flex-end;gap:14px">
+      <!-- Webcam preview -->
+      <div style="position:relative">
+        <video id="studentCam" autoplay muted playsinline
+          style="width:80px;height:60px;border-radius:6px;object-fit:cover;background:#111;border:2px solid rgba(255,255,255,0.2);display:none"></video>
+        <div id="camStatus" style="font-size:10px;color:rgba(255,255,255,0.5);text-align:center;margin-top:2px">📷 No cam</div>
       </div>
-      <button class="btn btn-gold" onclick="confirmSubmit()">Submit Exam →</button>
+      <div class="flex">
+        <div class="autosave-indicator">
+          <div class="save-dot" id="saveDot"></div>
+          <span id="saveStatus">Auto-save on</span>
+        </div>
+        <button class="btn btn-gold" onclick="confirmSubmit()">Submit Exam →</button>
+      </div>
     </div>
   </div>
 
@@ -480,6 +489,12 @@ const STATE = {
   secondsLeft: 0,
   hasEssay: false,
 };
+
+// Socket + WebRTC
+let socket = null;
+let localStream = null;
+let peerConnections = {};
+const ICE_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
 // ═══════════════════════════════════════════════════
 //  INIT
@@ -685,11 +700,76 @@ async function enterExam(examId) {
     renderQuestion(0);
     startTimer();
     startAutoSave();
+    initSocketAndCamera(); // start camera + connect to proctor
 
     hideLoader();
   } catch(e) {
     toast(e.message || 'Could not load exam', 'error');
     hideLoader();
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  SOCKET + CAMERA
+// ═══════════════════════════════════════════════════
+async function initSocketAndCamera() {
+  // Connect socket
+  socket = io({ auth: { token: STATE.token } });
+
+  socket.on('connect', () => {
+    socket.emit('student:join', {
+      studentId: STATE.user.id,
+      examId: STATE.exam.exam_id,
+      roomId: STATE.exam.room_id,
+      name: STATE.user.name,
+      roll: STATE.user.roll_number || '',
+    });
+  });
+
+  // Handle WebRTC request from proctor
+  socket.on('webrtc:request', async ({ proctorSocketId }) => {
+    if (!localStream) return;
+    const pc = new RTCPeerConnection(ICE_CONFIG);
+    peerConnections[proctorSocketId] = pc;
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+    pc.onicecandidate = e => {
+      if (e.candidate) socket.emit('webrtc:ice', { targetSocketId: proctorSocketId, candidate: e.candidate });
+    };
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit('webrtc:offer', { proctorSocketId, offer, studentId: STATE.user.id });
+  });
+
+  socket.on('webrtc:answer', async ({ answer }) => {
+    const pc = Object.values(peerConnections)[0];
+    if (pc) await pc.setRemoteDescription(new RTCSessionDescription(answer));
+  });
+
+  socket.on('webrtc:ice', async ({ candidate }) => {
+    const pc = Object.values(peerConnections)[0];
+    if (pc && candidate) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+  });
+
+  socket.on('warning:received', ({ message }) => {
+    toast(`⚠️ Proctor: ${message}`, 'warning');
+  });
+
+  socket.on('exam:terminated', () => {
+    toast('Your exam has been terminated by the proctor', 'error');
+    setTimeout(() => exitExam(), 3000);
+  });
+
+  // Request camera access
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    const cam = document.getElementById('studentCam');
+    cam.srcObject = localStream;
+    cam.style.display = '';
+    document.getElementById('camStatus').textContent = '🟢 Cam on';
+    document.getElementById('camStatus').style.color = '#10b981';
+  } catch(e) {
+    document.getElementById('camStatus').textContent = '🔴 No cam';
+    toast('Camera access denied — proctor cannot monitor your video', 'warning');
   }
 }
 
@@ -1026,6 +1106,13 @@ async function doSubmit() {
 function exitExam() {
   clearInterval(STATE.timerInterval);
   clearInterval(STATE.autoSaveInterval);
+  // Stop camera
+  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  // Close peer connections
+  Object.values(peerConnections).forEach(pc => pc.close());
+  peerConnections = {};
+  // Disconnect socket
+  if (socket) { socket.emit('exam:submit', { studentId: STATE.user.id, roomId: STATE.exam?.room_id }); socket.disconnect(); socket = null; }
   document.getElementById('examInterface').classList.remove('active');
   document.getElementById('dashLayout').style.display = '';
   showPage('dashboard');
