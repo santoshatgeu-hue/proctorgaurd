@@ -604,8 +604,27 @@ function connectSocket(roomId) {
   });
 
   socket.on('violation:new', (data) => {
-    loadViolations().then(() => { updateViolationBadge(); renderViolations(); });
-    toast(`⚠️ Violation: ${data.type} — ${data.studentName}`, 'error');
+    // Update violations count in local state for this student
+    const seat = STATE.seats.find(s => s.student_id == data.studentId);
+    if (seat) {
+      seat.violation_count = (seat.violation_count || 0) + 1;
+      seat.last_violation = data.type;
+    }
+    // Add to violations list
+    STATE.violations.unshift({
+      student_name: data.studentName,
+      type: data.type,
+      description: data.description || '',
+      created_at: new Date().toISOString(),
+      seat_id: seat?.id,
+    });
+    updateViolationBadge();
+    // Refresh current page
+    const activePage = document.querySelector('.nav-item.active')?.id;
+    if (activePage === 'nav-monitor') renderMonitor();
+    else if (activePage === 'nav-violations') renderViolations();
+    renderDashboard();
+    toast(`⚠️ Violation: ${data.type.replace('_',' ')} — ${data.studentName}`, 'error');
   });
 
   // WebRTC — receive video from student
@@ -773,10 +792,12 @@ function renderMonitor() {
 
   grid.innerHTML = seats.map(s => {
     const status = getSeatStatus(s);
-    const vCount = STATE.violations.filter(v => v.seat_id === s.id).length;
+    const dbViolations = STATE.violations.filter(v => v.seat_id === s.id);
+    const vCount = dbViolations.length || s.violation_count || 0;
+    const lastV = dbViolations[0]?.type || s.last_violation;
     return `
       <div class="student-card status-${status} ${vCount > 0 ? 'has-violation' : ''}" onclick="openStudentDetail(${s.id})">
-        ${vCount > 0 ? `<div class="violation-count">${vCount}</div>` : ''}
+        ${vCount > 0 ? `<div class="violation-count" title="${vCount} violation${vCount!==1?'s':''}">${vCount}</div>` : ''}
         <div class="student-name">${esc(s.student_name||'—')}</div>
         <div class="student-roll">${esc(s.roll_number||s.seat_number||'—')}</div>
         <div class="student-status">
@@ -785,8 +806,9 @@ function renderMonitor() {
         </div>
         ${s.started_at ? `<div style="font-size:10px;color:var(--text-muted);margin-top:4px">Started ${timeAgo(s.started_at)}</div>` : ''}
         ${s.submitted_at ? `<div style="font-size:10px;color:var(--info);margin-top:4px">✅ Submitted ${timeAgo(s.submitted_at)}</div>` : ''}
+        ${vCount > 0 ? `<div style="font-size:10px;color:var(--danger);margin-top:4px;font-weight:600">⚠️ ${vCount} violation${vCount!==1?'s':''} · ${(lastV||'').replace(/_/g,' ')}</div>` : ''}
         <div class="student-actions" onclick="event.stopPropagation()">
-          <button class="btn btn-danger btn-sm" onclick="openViolationModal(${s.id},'${esc(s.student_name||'')}')">⚠️</button>
+          <button class="btn btn-danger btn-sm" onclick="openViolationModal(${s.id},'${esc(s.student_name||'')}')">⚠️ Log</button>
           ${status === 'active' ? `<button class="btn btn-warning btn-sm" onclick="openForceSubmit(${s.id},'${esc(s.student_name||'')}')">⏹ Force</button>` : ''}
         </div>
       </div>`;
